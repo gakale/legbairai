@@ -11,11 +11,12 @@ use Gbairai\Core\Concerns\InteractsWithGbairaiCore;
 use Gbairai\Core\Contracts\UserContract;
 use Illuminate\Support\Str;
 use Filament\Models\Contracts\FilamentUser;
+use Laravel\Sanctum\HasApiTokens;
 
 class User extends Authenticatable implements UserContract, FilamentUser
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
-    use HasFactory, Notifiable, HasUuidPrimaryKey, InteractsWithGbairaiCore;
+    use HasFactory, Notifiable, HasUuidPrimaryKey, InteractsWithGbairaiCore, HasApiTokens;
 
     /**
      * The attributes that are mass assignable.

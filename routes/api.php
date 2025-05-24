@@ -1,10 +1,9 @@
 <?php
 
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-use Gbairai\Core\Http\Requests\StoreSpaceRequest;
-use Gbairai\Core\Actions\Spaces\CreateSpaceAction;
-use App\Models\User;
-use Illuminate\Support\Facades\Log;
+use App\Http\Controllers\Api\V1\SpaceApiController;
+use App\Http\Controllers\Api\V1\UserSpaceInteractionApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -17,53 +16,50 @@ use Illuminate\Support\Facades\Log;
 |
 */
 
-/**
- * Route de test pour la création d'un Space
- * 
- * Pour tester avec Postman ou un client HTTP similaire :
- * POST /api/test-create-space
- * Content-Type: application/json
- * Body: {
- *   "title": "Mon premier Space",
- *   "description": "Description du Space",
- *   "type": "public_free",
- *   "is_recording_enabled_by_host": true,
- *   "scheduled_at": "2025-06-01 15:00:00"
- * }
- */
-Route::post('/test-create-space', function (StoreSpaceRequest $request, CreateSpaceAction $createSpaceAction) {
-    if (!auth()->user()) { // Pour ce test, connectons un utilisateur factice
-        $user = User::first(); // Prenez un utilisateur existant
-        if (!$user) {
-            return response()->json(['error' => 'Créez un utilisateur pour tester'], 403);
-        }
-        auth()->login($user);
-    }
-
-    try {
-        $space = $createSpaceAction->execute(auth()->user(), $request->validated());
-        return response()->json([
-            'message' => 'Space créé avec succès',
-            'space' => $space->load('host')
-        ]); // Charger la relation pour voir
-    } catch (\Illuminate\Validation\ValidationException $e) {
-        return response()->json(['errors' => $e->errors()], 422);
-    } catch (\Throwable $e) {
-        Log::error('Error creating space: ' . $e->getMessage(), ['exception' => $e]);
-        return response()->json(['error' => 'Une erreur est survenue: ' . $e->getMessage()], 500);
-    }
+// Routes publiques (sans authentification)
+Route::group(['prefix' => 'v1', 'middleware' => ['api']], function () {
+    Route::post('/login', [App\Http\Controllers\Api\V1\AuthController::class, 'login'])->name('api.login');
+    Route::post('/register', [App\Http\Controllers\Api\V1\AuthController::class, 'register'])->name('api.register');
+    
+    // Route pour obtenir le cookie CSRF (nécessaire pour les requêtes SPA)
+    Route::get('/csrf-cookie', function() {
+        return response()->json(['message' => 'CSRF cookie set']);
+    });
 });
 
-// Route RESTful pour la création d'un Space
-Route::post('/spaces', function (StoreSpaceRequest $request, CreateSpaceAction $createSpaceAction) {
-    $user = auth()->user();
-    if (!$user) {
-        return response()->json(['error' => 'Non authentifié'], 401);
-    }
-    // La Policy est automatiquement vérifiée via StoreSpaceRequest::authorize()
-    $space = $createSpaceAction->execute($user, $request->validated());
-    return response()->json([
-        'message' => 'Space créé avec succès',
-        'space' => $space->load('host')
-    ], 201);
+Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
+    Route::get('/user', function (Request $request) {
+        return new \App\Http\Resources\UserResource($request->user()->loadCount(['hostedSpaces', /* autres relations si besoin */]));
+    })->name('api.user.me');
+    Route::post('/logout', [App\Http\Controllers\Api\V1\AuthController::class, 'logout'])->name('api.logout');
+
+    // --- Routes pour les Spaces ---
+    Route::prefix('spaces')->name('api.v1.spaces.')->group(function () {
+        Route::get('/', [SpaceApiController::class, 'index'])->name('index'); // Lister les Spaces
+        Route::post('/', [SpaceApiController::class, 'store'])->name('store'); // Créer un Space
+        Route::get('/{space}', [SpaceApiController::class, 'show'])->name('show'); // Détails d'un Space
+        // Route::put('/{space}', [SpaceApiController::class, 'update'])->name('update'); // Mettre à jour un Space
+        // Route::delete('/{space}', [SpaceApiController::class, 'destroy'])->name('destroy'); // Supprimer un Space
+
+        // Actions spécifiques sur un Space (par l'hôte/co-hôte)
+        Route::post('/{space}/start', [SpaceApiController::class, 'start'])->name('start');
+        Route::post('/{space}/end', [SpaceApiController::class, 'end'])->name('end');
+
+        // Interactions des utilisateurs avec un Space
+        Route::post('/{space}/join', [UserSpaceInteractionApiController::class, 'join'])->name('join');
+        Route::post('/{space}/leave', [UserSpaceInteractionApiController::class, 'leave'])->name('leave');
+        Route::post('/{space}/raise-hand', [UserSpaceInteractionApiController::class, 'raiseHand'])->name('raiseHand');
+
+        // Actions de modération par l'hôte/co-hôte sur les participants
+        // Route::post('/{space}/participants/{participantUser}/role', [UserSpaceInteractionApiController::class, 'changeRole'])->name('participants.role');
+        // Route::post('/{space}/participants/{participantUser}/mute', [UserSpaceInteractionApiController::class, 'muteParticipant'])->name('participants.mute');
+        // Route::post('/{space}/participants/{participantUser}/unmute', [UserSpaceInteractionApiController::class, 'unmuteParticipant'])->name('participants.unmute');
+    });
+
+    // --- Routes pour les Utilisateurs (Profils, Suivi) ---
+    // Route::prefix('v1/users')->name('api.v1.users.')->group(function () {
+    //     Route::get('/{user}', [App\Http\Controllers\Api\V1\UserApiController::class, 'show'])->name('show');
+    //     Route::post('/{user}/follow', [App\Http\Controllers\Api\V1\UserApiController::class, 'follow'])->name('follow');
+    //     Route::delete('/{user}/unfollow', [App\Http\Controllers\Api\V1\UserApiController::class, 'unfollow'])->name('unfollow');
+    // });
 });
