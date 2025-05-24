@@ -308,7 +308,7 @@ class SpaceResource extends Resource
     public static function getRelations(): array
     {
         return [
-            // RelationManagers\ParticipantsRelationManager::class, // Nous créerons cela plus tard
+            RelationManagers\ParticipantsRelationManager::class, // Ajoutez cette ligne
         ];
     }
 

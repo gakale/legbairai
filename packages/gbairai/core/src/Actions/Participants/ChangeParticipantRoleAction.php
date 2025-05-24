@@ -68,14 +68,17 @@ class ChangeParticipantRoleAction
 
         // Si on passe à Intervenant, on pourrait vouloir désactiver "main levée"
         if ($newRole === SpaceParticipantRole::SPEAKER) {
-            $targetParticipant->has_raised_hand = false;
-            // $targetParticipant->is_muted_by_host = false; // Potentiellement démuter par l'hôte
+            $targetParticipant->has_raised_hand = false; // Important
+            // $targetParticipant->is_muted_by_host = false; // Optionnel: démuter automatiquement par l'hôte
+                                                          // L'hôte devra peut-être le faire manuellement via une autre action "unmute".
+                                                          // Ou, si on démute ici, s'assurer que la policy le permet.
         }
 
         // Si on repasse à Auditeur, on pourrait vouloir le muter
         if ($newRole === SpaceParticipantRole::LISTENER) {
-            $targetParticipant->is_muted_by_host = true;
-            $targetParticipant->is_self_muted = true; // Peut-être
+            $targetParticipant->is_muted_by_host = true; // Muter par l'hôte est une bonne sécurité
+            $targetParticipant->is_self_muted = true;    // S'il avait démuté son micro, il est remuté.
+            $targetParticipant->has_raised_hand = false; // Assurer que la main est baissée
         }
 
         // La promotion en CO_HOST devrait avoir des règles strictes
