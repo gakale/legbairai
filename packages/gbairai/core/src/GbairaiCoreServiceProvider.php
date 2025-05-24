@@ -22,9 +22,9 @@ class GbairaiCoreServiceProvider extends PackageServiceProvider
             ->hasConfigFile()
             // ->hasViews() // Si votre package fournit des vues Blade
             ->hasMigrations([
-                'create_spaces_table',
-                'create_space_participants_table',
-                'create_space_messages_table',
+                'create_spaces_table', 
+                'create_space_participants_table', 
+                'create_space_messages_table', 
                 'create_space_recordings_table',
                 // Ajoutez d'autres migrations ici au fur et à mesure
             ])

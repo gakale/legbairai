@@ -6,34 +6,29 @@ namespace Gbairai\Core\Models;
 
 use Gbairai\Core\Concerns\HasUuidPrimaryKey;
 use Gbairai\Core\Contracts\UserContract;
-use Gbairai\Core\Enums\SpaceParticipantRole;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Support\Carbon;
 
 /**
- * Gbairai\Core\Models\SpaceParticipant
+ * Gbairai\Core\Models\SpaceMessage
  *
  * @property string $id UUID
  * @property string $space_id UUID
  * @property string $user_id UUID
- * @property SpaceParticipantRole $role
- * @property Carbon $joined_at
- * @property Carbon|null $left_at
- * @property bool $is_muted_by_host
- * @property bool $is_self_muted
- * @property bool $has_raised_hand
+ * @property string $content
+ * @property bool $is_pinned
  * @property Carbon $created_at
  * @property Carbon $updated_at
  *
  * @property-read \Gbairai\Core\Models\Space $space
- * @property-read UserContract $user
+ * @property-read UserContract $user Sender of the message
  *
- * @method static \Illuminate\Database\Eloquent\Builder|\Gbairai\Core\Models\SpaceParticipant newModelQuery()
- * @method static \Illuminate\Database\Eloquent\Builder|\Gbairai\Core\Models\SpaceParticipant newQuery()
- * @method static \Illuminate\Database\Eloquent\Builder|\Gbairai\Core\Models\SpaceParticipant query()
+ * @method static \Illuminate\Database\Eloquent\Builder|\Gbairai\Core\Models\SpaceMessage newModelQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder|\Gbairai\Core\Models\SpaceMessage newQuery()
+ * @method static \Illuminate\Database\Eloquent\Builder|\Gbairai\Core\Models\SpaceMessage query()
  */
-class SpaceParticipant extends Model
+class SpaceMessage extends Model
 {
     use HasUuidPrimaryKey;
 
@@ -42,7 +37,7 @@ class SpaceParticipant extends Model
      *
      * @var string
      */
-    protected $table = 'space_participants'; // Sera écrasé par la config
+    protected $table = 'space_messages'; // Sera écrasé par la config
 
     /**
      * The attributes that are mass assignable.
@@ -52,12 +47,8 @@ class SpaceParticipant extends Model
     protected $fillable = [
         'space_id',
         'user_id',
-        'role',
-        'joined_at',
-        'left_at',
-        'is_muted_by_host',
-        'is_self_muted',
-        'has_raised_hand',
+        'content',
+        'is_pinned',
     ];
 
     /**
@@ -69,12 +60,7 @@ class SpaceParticipant extends Model
         'id' => 'string',
         'space_id' => 'string',
         'user_id' => 'string',
-        'role' => SpaceParticipantRole::class,
-        'joined_at' => 'datetime',
-        'left_at' => 'datetime',
-        'is_muted_by_host' => 'boolean',
-        'is_self_muted' => 'boolean',
-        'has_raised_hand' => 'boolean',
+        'is_pinned' => 'boolean',
     ];
 
     /**
@@ -82,16 +68,16 @@ class SpaceParticipant extends Model
      *
      * @var bool
      */
-    public $timestamps = true; // created_at et updated_at seront gérés
+    public $timestamps = true; // Gère created_at et updated_at
 
     public function __construct(array $attributes = [])
     {
         parent::__construct($attributes);
-        $this->table = config('gbairai-core.table_names.space_participants', 'space_participants');
+        $this->table = config('gbairai-core.table_names.space_messages', 'space_messages');
     }
 
     /**
-     * Get the space this participant belongs to.
+     * Get the space this message belongs to.
      */
     public function space(): BelongsTo
     {
@@ -99,10 +85,12 @@ class SpaceParticipant extends Model
     }
 
     /**
-     * Get the user associated with this participation.
+     * Get the user who sent the message.
      */
     public function user(): BelongsTo
     {
         return $this->belongsTo(config('gbairai-core.models.user'), 'user_id');
     }
+
+    // TODO: Ajouter des scopes si nécessaire (ex: pinned())
 }

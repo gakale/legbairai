@@ -29,6 +29,8 @@ return [
         'users' => 'users',
         'spaces' => 'spaces',
         'space_participants' => 'space_participants',
+        'space_messages' => 'space_messages', // Nouveau
+        'space_recordings' => 'space_recordings', // Nouveau
         'space_messages' => 'space_messages',
         'space_recordings' => 'space_recordings',
         'donations' => 'donations',
@@ -49,11 +51,11 @@ return [
     |
     */
     'models' => [
-        'user' => \App\Models\User::class, // Doit correspondre à user_model
+        'user' => \App\Models\User::class, 
         'space' => \Gbairai\Core\Models\Space::class,
         'space_participant' => \Gbairai\Core\Models\SpaceParticipant::class,
-        'space_message' => \Gbairai\Core\Models\SpaceMessage::class,
-        'space_recording' => \Gbairai\Core\Models\SpaceRecording::class,
+        'space_message' => \Gbairai\Core\Models\SpaceMessage::class, 
+        'space_recording' => \Gbairai\Core\Models\SpaceRecording::class, 
         // Ajoutez d'autres modèles ici
     ],
 

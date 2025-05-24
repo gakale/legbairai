@@ -1,0 +1,16 @@
+includes:
+    - ./vendor/larastan/larastan/extension.neon
+    - ./vendor/calebdw/larastan-livewire/extension.neon
+
+parameters:
+    paths:
+        - app/
+        - packages/gbairai/core/src/
+        # - routes/
+        # - config/
+
+    level: 5
+
+    # ignoreErrors:
+    #     - '#PHPDoc tag @var#'
+

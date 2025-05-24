@@ -58,7 +58,7 @@ class Space extends Model
     /**
      * The attributes that are mass assignable.
      *
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $fillable = [
         'host_user_id',
@@ -99,7 +99,7 @@ class Space extends Model
     /**
      * The relationships that should always be loaded.
      *
-     * @var array<int, string>
+     * @var list<string>
      */
     protected $with = [
         // 'host' // Exemple, à charger conditionnellement pour éviter N+1
