@@ -153,17 +153,44 @@ class SpacePolicy
 
     /**
      * Determine if the user can join a space.
+     * (Doit être affinée pour les spaces payants, sur abo, pleins, bannis etc.)
      */
-    public function join(User $user, Space $space): bool
+    public function join(?User $user, Space $space): bool // User peut être null si on veut vérifier pour un invité
     {
+        if (!$user) return false; // Doit être authentifié pour rejoindre
+
         if ($space->status !== \Gbairai\Core\Enums\SpaceStatus::LIVE) {
             return false; // Ne peut pas rejoindre un space non live
         }
-        // TODO: Vérifier si le space est plein (max_participants)
-        // TODO: Vérifier si l'utilisateur est banni du space
-        // TODO: Gérer les spaces payants (billets) ou sur abonnement
 
-        return $this->view($user, $space); // Si l'utilisateur peut voir le space, il peut tenter de le rejoindre (d'autres règles s'appliqueront)
+        // Vérifier si l'utilisateur est l'hôte
+        if ($space->host_user_id === $user->getId()) {
+            return true; // L'hôte peut toujours (re)joindre son propre space (sa participation est spéciale)
+        }
+
+
+        // TODO: Vérifier si le space est plein (max_participants)
+        // $currentParticipantsCount = $space->participants()->whereNull('left_at')->count();
+        // if ($space->max_participants !== null && $currentParticipantsCount >= $space->max_participants) {
+        //     // Vérifier si l'utilisateur est déjà un participant qui revient
+        //     $isReturningParticipant = $space->participants()->where('user_id', $user->getId())->exists();
+        //     if (!$isReturningParticipant) {
+        //          return false; // Plein et nouvel utilisateur
+        //     }
+        // }
+
+
+        // TODO: Gérer les spaces payants (billets) ou sur abonnement
+        // if ($space->type === \Gbairai\Core\Enums\SpaceType::PUBLIC_PAID && !$user->hasTicketFor($space)) {
+        //     return false;
+        // }
+        // if ($space->type === \Gbairai\Core\Enums\SpaceType::PRIVATE_SUBSCRIBER && !$user->isSubscribedTo($space->host)) {
+        //     return false;
+        // }
+
+        // Pour l'instant, si le space est live et que l'utilisateur n'est pas l'hôte, il peut tenter de rejoindre
+        // (d'autres règles métier dans l'action peuvent l'empêcher).
+        return true;
     }
 
     /**
@@ -185,7 +212,19 @@ class SpacePolicy
      */
     public function manageParticipants(User $user, Space $space): bool
     {
-         return $this->update($user, $space); // Seuls ceux qui peuvent mettre à jour le space (hôte/co-hôte)
+        if ($user->getId() === $space->host_user_id) {
+            return true; // L'hôte peut toujours gérer
+        }
+    
+        // Vérifier si l'utilisateur est un co-hôte actif dans ce space
+        /** @var \Gbairai\Core\Models\SpaceParticipant|null $participantRecord */
+        $participantRecord = $space->participants()
+            ->where('user_id', $user->getId())
+            ->where('role', \Gbairai\Core\Enums\SpaceParticipantRole::CO_HOST)
+            ->whereNull('left_at')
+            ->first();
+    
+        return $participantRecord !== null;
     }
 
     /**
