@@ -33,4 +33,13 @@ enum SpaceType: string
     {
         return array_column(self::cases(), 'value');
     }
+
+    /**
+     * Check if the space type is public.
+     */
+    
+    public function isPublic(): bool
+    {
+        return in_array($this, [self::PUBLIC_FREE, self::PUBLIC_PAID], true);
+    }
 }
