@@ -26,6 +26,7 @@ class GbairaiCoreServiceProvider extends PackageServiceProvider
                 'create_space_participants_table', 
                 'create_space_messages_table', 
                 'create_space_recordings_table',
+                'create_follows_table',
                 // Ajoutez d'autres migrations ici au fur et à mesure
             ])
             // ->hasCommand(GbairaiCoreCommand::class) // Si vous ajoutez des commandes Artisan

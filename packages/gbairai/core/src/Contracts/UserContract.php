@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Gbairai\Core\Contracts;
 
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Support\Carbon;
 
 /**
@@ -47,9 +48,11 @@ interface UserContract
     // public function donationsMade(): HasMany;
     // public function donationsReceived(): HasMany;
     // public function tickets(): HasMany;
-    // public function followedUsers(): BelongsToMany; // Ceux que cet utilisateur suit
-    // public function followers(): BelongsToMany; // Ceux qui suivent cet utilisateur
+    public function followedUsers(): BelongsToMany; // Ceux que cet utilisateur suit
+    public function followers(): BelongsToMany; // Ceux qui suivent cet utilisateur
     // public function subscriptionsMade(): HasMany; // Abonnements que l'utilisateur a pris
     // public function subscriptionsReceived(): HasMany; // Abonnements que les créateurs reçoivent
     // public function notifications(): HasMany;
+    public function isFollowing(UserContract $userToFollow): bool;
+
 }

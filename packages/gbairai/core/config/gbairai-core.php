@@ -56,7 +56,7 @@ return [
         'space_participant' => \Gbairai\Core\Models\SpaceParticipant::class,
         'space_message' => \Gbairai\Core\Models\SpaceMessage::class, 
         'space_recording' => \Gbairai\Core\Models\SpaceRecording::class, 
-        // Ajoutez d'autres modèles ici
+        'follow' => \Gbairai\Core\Models\Follow::class,
     ],
 
     /*

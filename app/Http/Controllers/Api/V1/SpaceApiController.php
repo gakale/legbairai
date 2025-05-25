@@ -10,9 +10,13 @@ use Gbairai\Core\Actions\Spaces\CreateSpaceAction;
 use Gbairai\Core\Actions\Spaces\StartSpaceAction;
 use Gbairai\Core\Actions\Spaces\EndSpaceAction;
 use Gbairai\Core\Http\Requests\StoreSpaceRequest as CoreStoreSpaceRequest; // Request du package
+use Gbairai\Core\Http\Requests\UpdateSpaceRequest as CoreUpdateSpaceRequest; // Importer
+
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
+use Gbairai\Core\Actions\Spaces\UpdateSpaceAction; // Importer
+use Illuminate\Http\Response; // Pour le code 204 No Content
 
 class SpaceApiController extends Controller
 {
@@ -82,5 +86,25 @@ class SpaceApiController extends Controller
     {
         $endedSpace = $endSpaceAction->execute(Auth::user(), $space);
         return response()->json(new ApiSpaceResource($endedSpace->load('host')));
+    }
+
+    public function update(CoreUpdateSpaceRequest $request, Space $space, UpdateSpaceAction $updateSpaceAction): JsonResponse
+    {
+        // CoreUpdateSpaceRequest gère l'autorisation pour 'update' et la validation des données.
+        // L'action UpdateSpaceAction gère aussi une vérification de policy 'update' et 'manageRecording'.
+        $updatedSpace = $updateSpaceAction->execute(Auth::user(), $space, $request->validated());
+
+        return response()->json(new ApiSpaceResource($updatedSpace->load('host')));
+    }
+
+    /**
+     * Remove the specified resource from storage.
+     */
+    public function destroy(Request $request, Space $space, DeleteSpaceAction $deleteSpaceAction): Response
+    {
+        // L'autorisation est gérée à l'intérieur de DeleteSpaceAction via Gate::authorize('delete', $space)
+        $deleteSpaceAction->execute(Auth::user(), $space);
+
+        return response()->noContent(); // Code 204: Succès, pas de contenu à retourner
     }
 }

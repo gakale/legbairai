@@ -38,8 +38,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
         Route::get('/', [SpaceApiController::class, 'index'])->name('index'); // Lister les Spaces
         Route::post('/', [SpaceApiController::class, 'store'])->name('store'); // Créer un Space
         Route::get('/{space}', [SpaceApiController::class, 'show'])->name('show'); // Détails d'un Space
-        // Route::put('/{space}', [SpaceApiController::class, 'update'])->name('update'); // Mettre à jour un Space
-        // Route::delete('/{space}', [SpaceApiController::class, 'destroy'])->name('destroy'); // Supprimer un Space
+        Route::put('/{space}', [SpaceApiController::class, 'update'])->name('update'); // Mettre à jour un Space
+        Route::delete('/{space}', [SpaceApiController::class, 'destroy'])->name('destroy'); // Supprimer un Space
 
         // Actions spécifiques sur un Space (par l'hôte/co-hôte)
         Route::post('/{space}/start', [SpaceApiController::class, 'start'])->name('start');
@@ -51,15 +51,14 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
         Route::post('/{space}/raise-hand', [UserSpaceInteractionApiController::class, 'raiseHand'])->name('raiseHand');
 
         // Actions de modération par l'hôte/co-hôte sur les participants
-        // Route::post('/{space}/participants/{participantUser}/role', [UserSpaceInteractionApiController::class, 'changeRole'])->name('participants.role');
-        // Route::post('/{space}/participants/{participantUser}/mute', [UserSpaceInteractionApiController::class, 'muteParticipant'])->name('participants.mute');
-        // Route::post('/{space}/participants/{participantUser}/unmute', [UserSpaceInteractionApiController::class, 'unmuteParticipant'])->name('participants.unmute');
+        Route::post('/{space}/participants/{participantUser}/mute', [UserSpaceInteractionApiController::class, 'muteParticipant'])->name('participants.mute');
+        Route::post('/{space}/participants/{participantUser}/unmute', [UserSpaceInteractionApiController::class, 'unmuteParticipant'])->name('participants.unmute');
     });
 
     // --- Routes pour les Utilisateurs (Profils, Suivi) ---
-    // Route::prefix('v1/users')->name('api.v1.users.')->group(function () {
-    //     Route::get('/{user}', [App\Http\Controllers\Api\V1\UserApiController::class, 'show'])->name('show');
-    //     Route::post('/{user}/follow', [App\Http\Controllers\Api\V1\UserApiController::class, 'follow'])->name('follow');
-    //     Route::delete('/{user}/unfollow', [App\Http\Controllers\Api\V1\UserApiController::class, 'unfollow'])->name('unfollow');
-    // });
+    Route::prefix('v1/users')->name('api.v1.users.')->group(function () {
+        Route::post('/{user}/follow', [App\Http\Controllers\Api\V1\UserApiController::class, 'follow'])->name('follow');
+        Route::delete('/{user}/unfollow', [App\Http\Controllers\Api\V1\UserApiController::class, 'unfollow'])->name('unfollow');
+    });
 });
+Route::get('/v1/users/{user}', [UserApiController::class, 'show'])->name('api.v1.users.show.public');

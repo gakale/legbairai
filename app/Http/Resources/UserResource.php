@@ -22,8 +22,14 @@ class UserResource extends JsonResource
             // 'name' => $this->name, // Si vous avez un champ 'name'
             'is_verified' => $this->is_verified,
             'is_premium' => $this->is_premium,
+            'followers_count' => $this->whenCounted('followers'),
+            'followings_count' => $this->whenCounted('followings'),
             // N'exposez pas l'email ou d'autres infos sensibles sauf si nécessaire pour l'utilisateur authentifié lui-même
             // ou pour des contextes spécifiques.
+            'is_followed_by_current_user' => $this->when(isset($this->is_followed_by_current_user), $this->is_followed_by_current_user),
+            'email' => $this->when(Auth::check() && Auth::id() === $this->id, $this->email),
+
+
         ];
     }
 }

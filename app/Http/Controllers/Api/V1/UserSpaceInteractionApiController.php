@@ -37,4 +37,40 @@ class UserSpaceInteractionApiController extends Controller
             'participant' => new SpaceParticipantResource($participant->load('user'))
         ]);
     }
+
+    public function muteParticipant(
+        Request $request,
+        Space $space,
+        User $participantUser, // Model binding pour l'utilisateur cible
+        MuteParticipantByHostAction $muteAction
+    ): JsonResponse {
+        $participant = $muteAction->execute(Auth::user(), $space, $participantUser);
+        return response()->json(new SpaceParticipantResource($participant->load('user')));
+    }
+
+    public function unmuteParticipant(
+        Request $request,
+        Space $space,
+        User $participantUser, // Model binding
+        UnmuteParticipantByHostAction $unmuteAction
+    ): JsonResponse {
+        $participant = $unmuteAction->execute(Auth::user(), $space, $participantUser);
+        return response()->json(new SpaceParticipantResource($participant->load('user')));
+    }
+
+    public function changeRole(
+        Request $request, // On aura besoin des données du corps de la requête pour le nouveau rôle
+        Space $space,
+        User $participantUser,
+        ChangeParticipantRoleAction $changeRoleAction
+    ): JsonResponse {
+        $validated = $request->validate([
+            'role' => ['required', new \Illuminate\Validation\Rules\Enum(SpaceParticipantRole::class)],
+        ]);
+
+        $newRole = SpaceParticipantRole::from($validated['role']);
+
+        $participant = $changeRoleAction->execute(Auth::user(), $space, $participantUser, $newRole);
+        return response()->json(new SpaceParticipantResource($participant->load('user')));
+    }
 }
