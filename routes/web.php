@@ -5,6 +5,8 @@ use Gbairai\Core\Http\Requests\StoreSpaceRequest;
 use Gbairai\Core\Actions\Spaces\CreateSpaceAction;
 use App\Models\User;
 use Illuminate\Support\Facades\Log;
+use App\Events\SpaceStartedEvent;
+use Gbairai\Core\Models\Space;
 
 Route::get('/', function () {
     return view('welcome');
@@ -46,4 +48,25 @@ Route::middleware('web')->withoutMiddleware(['csrf'])->post('/test-create-space'
         Log::error('Error creating space: ' . $e->getMessage(), ['exception' => $e]);
         return response()->json(['error' => 'Une erreur est survenue: ' . $e->getMessage()], 500);
     }
+});
+
+// Route pour la page de test en temps réel
+Route::get('/realtime-test', function () {
+    return view('realtime-test');
+});
+
+// Route pour déclencher manuellement l'événement SpaceStartedEvent (pour les tests)
+Route::get('/trigger-space-event/{spaceId}', function ($spaceId) {
+    $space = Space::find($spaceId);
+    
+    if (!$space) {
+        return response()->json(['error' => 'Space non trouvé'], 404);
+    }
+    
+    SpaceStartedEvent::dispatch($space);
+    
+    return response()->json([
+        'success' => true,
+        'message' => "Événement SpaceStartedEvent déclenché pour le space {$space->title}"
+    ]);
 });

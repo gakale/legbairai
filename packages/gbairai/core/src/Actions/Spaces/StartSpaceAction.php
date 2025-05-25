@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Gbairai\Core\Actions\Spaces;
 
+use App\Events\SpaceStartedEvent;
 use Gbairai\Core\Contracts\UserContract;
 use Gbairai\Core\Enums\SpaceStatus;
 use Gbairai\Core\Models\Space;
@@ -58,9 +59,9 @@ class StartSpaceAction
         // - Envoyer des notifications aux followers du créateur.
         //   (Utiliser le système de Queues de Laravel pour cela)
         //   Notification::send($space->host->followers, new SpaceStartedNotification($space));
-        //
-        // - Déclencher un événement SpaceStarted
-        //   event(new SpaceStarted($space, $user));
+        
+        // Déclencher l'événement SpaceStarted pour le broadcasting en temps réel
+        SpaceStartedEvent::dispatch($space);
 
         return $space;
     }

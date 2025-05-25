@@ -14,9 +14,9 @@ const initReactApp = () => {
     if (container) {
         const root = createRoot(container);
         root.render(
-            React.createElement(React.StrictMode, null,
-                React.createElement(RealtimeSpaceTest, { spaceIdToListen: spaceId })
-            )
+            <React.StrictMode>
+                <RealtimeSpaceTest spaceIdToListen={spaceId} />
+            </React.StrictMode>
         );
         console.log('Composant React monté avec succès pour le space ID:', spaceId);
     } else {
