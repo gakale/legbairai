@@ -11,6 +11,8 @@ use Gbairai\Core\Actions\Participants\RaiseHandAction;
 use App\Http\Resources\SpaceParticipantResource;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
+use Gbairai\Core\Actions\Messages\SendSpaceMessageAction; // Importer
+use App\Http\Resources\SpaceMessageResource; 
 
 class UserSpaceInteractionApiController extends Controller
 {
@@ -72,5 +74,29 @@ class UserSpaceInteractionApiController extends Controller
 
         $participant = $changeRoleAction->execute(Auth::user(), $space, $participantUser, $newRole);
         return response()->json(new SpaceParticipantResource($participant->load('user')));
+    }
+
+    public function sendMessage(
+        Request $request, // Laravel Request pour récupérer le contenu
+        Space $space,
+        SendSpaceMessageAction $sendMessageAction
+    ): JsonResponse {
+        // La validation du contenu est dans SendSpaceMessageAction
+        // L'autorisation est aussi gérée dans SendSpaceMessageAction
+
+        $validatedData = $request->validate([
+            'content' => ['required', 'string', 'min:1', 'max:1000'],
+        ]);
+
+        $message = $sendMessageAction->execute(
+            Auth::user(),
+            $space,
+            $validatedData['content']
+        );
+
+        // L'événement NewSpaceMessageEvent est déjà déclenché par l'action.
+        // Le client recevra le message via WebSocket.
+        // On retourne le message créé en réponse à la requête POST pour confirmation.
+        return response()->json(new SpaceMessageResource($message), 201);
     }
 }

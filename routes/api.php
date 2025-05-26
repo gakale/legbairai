@@ -53,6 +53,9 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
         // Actions de modération par l'hôte/co-hôte sur les participants
         Route::post('/{space}/participants/{participantUser}/mute', [UserSpaceInteractionApiController::class, 'muteParticipant'])->name('participants.mute');
         Route::post('/{space}/participants/{participantUser}/unmute', [UserSpaceInteractionApiController::class, 'unmuteParticipant'])->name('participants.unmute');
+
+        // Envoi de messages dans un Space
+        Route::post('/{space}/message', [UserSpaceInteractionApiController::class, 'sendMessage'])->name('message');
     });
 
     // --- Routes pour les Utilisateurs (Profils, Suivi) ---

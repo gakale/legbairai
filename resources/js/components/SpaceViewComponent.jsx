@@ -1,10 +1,15 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
+import axios from 'axios';
 // Assurez-vous que window.Echo est initialisé
 
 function SpaceViewComponent({ spaceId, currentUserId }) { // currentUserId est l'ID de l'utilisateur connecté
     const [spaceDetails, setSpaceDetails] = useState(null);
     const [participants, setParticipants] = useState([]);
     const [connectionStatus, setConnectionStatus] = useState('Déconnecté');
+    const [messages, setMessages] = useState([]);
+    const [newMessage, setNewMessage] = useState('');
+    const [sendingMessage, setSendingMessage] = useState(false);
+    const messagesEndRef = useRef(null);
 
     // Fonction pour charger les détails initiaux du space et les participants
     const fetchSpaceData = useCallback(async () => {
@@ -78,6 +83,16 @@ function SpaceViewComponent({ spaceId, currentUserId }) { // currentUserId est l
                             : p
                     )
                 );
+            })
+            .listen('.message.new', (eventData) => {
+                console.log('Événement "message.new" reçu:', eventData);
+                setMessages(prevMessages => {
+                    // Éviter d'ajouter un message si son ID est déjà dans la liste
+                    if (prevMessages.find(m => m.id === eventData.message.id)) {
+                        return prevMessages;
+                    }
+                    return [...prevMessages, eventData.message];
+                });
             });
             // ... écouter d'autres événements (new.message etc.)
 
@@ -87,6 +102,39 @@ function SpaceViewComponent({ spaceId, currentUserId }) { // currentUserId est l
             setConnectionStatus('Déconnecté');
         };
     }, [spaceId, fetchSpaceData]);
+    
+    // Effet pour faire défiler vers le bas quand de nouveaux messages arrivent
+    useEffect(() => {
+        if (messagesEndRef.current) {
+            messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+        }
+    }, [messages]);
+    
+    // Fonction pour envoyer un message
+    const handleSendMessage = async (e) => {
+        e.preventDefault();
+        if (!newMessage.trim() || sendingMessage) return;
+        
+        setSendingMessage(true);
+        try {
+            const response = await axios.post(`/api/v1/spaces/${spaceId}/message`, {
+                content: newMessage
+            }, {
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                }
+            });
+            
+            console.log('Message envoyé avec succès:', response.data);
+            setNewMessage(''); // Vider le champ après envoi
+        } catch (error) {
+            console.error('Erreur lors de l\'envoi du message:', error);
+            alert('Erreur lors de l\'envoi du message. Veuillez réessayer.');
+        } finally {
+            setSendingMessage(false);
+        }
+    };
 
     return (
         <div className="space-view-component">
@@ -102,7 +150,55 @@ function SpaceViewComponent({ spaceId, currentUserId }) { // currentUserId est l
                     </li>
                 ))}
             </ul>
-            <div className="action-buttons">
+            {/* Section de chat */}
+            <div className="chat-section mt-4">
+                <h3>Chat</h3>
+                <div className="chat-messages" style={{ height: '300px', overflowY: 'scroll', border: '1px solid #ddd', padding: '10px', marginBottom: '10px', borderRadius: '5px' }}>
+                    {messages.length === 0 ? (
+                        <p className="text-muted">Aucun message pour le moment. Soyez le premier à écrire !</p>
+                    ) : (
+                        messages.map(msg => (
+                            <div key={msg.id} className={`message ${msg.sender?.id === currentUserId ? 'message-mine' : ''}`} style={{ marginBottom: '10px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                                    <strong>{msg.sender?.username || msg.sender?.name || 'Anonyme'}</strong>
+                                    <small style={{ color: 'gray' }}>{msg.created_at_formatted || new Date().toLocaleTimeString()}</small>
+                                </div>
+                                <div style={{ 
+                                    backgroundColor: msg.sender?.id === currentUserId ? '#dcf8c6' : '#f1f0f0', 
+                                    padding: '8px', 
+                                    borderRadius: '5px',
+                                    marginTop: '5px'
+                                }}>
+                                    {msg.content}
+                                </div>
+                            </div>
+                        ))
+                    )}
+                    <div ref={messagesEndRef} />
+                </div>
+                
+                <form onSubmit={handleSendMessage} className="chat-form">
+                    <div className="input-group">
+                        <input 
+                            type="text" 
+                            className="form-control" 
+                            placeholder="Tapez votre message..." 
+                            value={newMessage} 
+                            onChange={(e) => setNewMessage(e.target.value)}
+                            disabled={sendingMessage}
+                        />
+                        <button 
+                            type="submit" 
+                            className="btn btn-primary"
+                            disabled={!newMessage.trim() || sendingMessage}
+                        >
+                            {sendingMessage ? 'Envoi...' : 'Envoyer'}
+                        </button>
+                    </div>
+                </form>
+            </div>
+            
+            <div className="action-buttons mt-4">
                 <h4>Actions de test:</h4>
                 <button 
                     className="btn btn-primary"

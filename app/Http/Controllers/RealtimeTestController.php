@@ -7,11 +7,14 @@ use App\Events\UserLeftSpaceEvent;
 use App\Events\SpaceStartedEvent;
 use App\Events\UserRaisedHandEvent;
 use App\Events\ParticipantRoleChangedEvent;
+use App\Events\NewSpaceMessageEvent;
 use Gbairai\Core\Models\Space;
 use Gbairai\Core\Models\SpaceParticipant;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Broadcast;
 use Gbairai\Core\Actions\Participants\RaiseHandAction;
 use Gbairai\Core\Actions\Participants\ChangeParticipantRoleAction;
 use Gbairai\Core\Enums\SpaceParticipantRole;
@@ -276,6 +279,90 @@ class RealtimeTestController extends Controller
             return response()->json(['success' => false, 'error' => 'Space ou Participant non trouvé'], 404);
         } catch (\RuntimeException $e) {
             return response()->json(['success' => false, 'error' => $e->getMessage()], 400);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Simule l'envoi d'un message dans un espace (sans authentification pour les tests)
+     */
+    public function testSendMessage(Request $request, $spaceId)
+    {
+        $validated = $request->validate([
+            'content' => 'required|string|min:1|max:1000',
+            'sender_name' => 'nullable|string|max:255'
+        ]);
+
+        try {
+            $space = Space::findOrFail($spaceId);
+            
+            // Créer un message de test
+            $message = new \Gbairai\Core\Models\SpaceMessage();
+            $message->id = Str::uuid()->toString();
+            $message->space_id = $space->id;
+            
+            // Utiliser l'ID de l'hôte de l'espace comme expéditeur par défaut
+            $senderId = $space->host_user_id;
+            $sender = User::find($senderId);
+            
+            if (!$sender) {
+                // Fallback : utiliser le premier utilisateur disponible
+                $sender = User::first();
+                if (!$sender) {
+                    throw new \RuntimeException("Aucun utilisateur disponible pour envoyer le message.");
+                }
+            }
+            
+            $message->user_id = $sender->id;
+            $message->content = $validated['content'];
+            $message->save();
+            
+            // Nous n'avons pas besoin de charger la relation utilisateur car nous allons construire manuellement les données
+            
+            // Déclencher l'événement
+            // Pour les tests, nous diffusons directement sur un canal public
+            $messageData = [
+                'message' => [
+                    'id' => $message->id,
+                    'content' => $message->content,
+                    'created_at' => $message->created_at->toIso8601String(),
+                    'created_at_formatted' => $message->created_at->format('H:i'),
+                    'sender' => [
+                        'id' => $sender->id,
+                        'name' => $validated['sender_name'] ?? $sender->name,
+                        'username' => $sender->username ?? $sender->name
+                    ]
+                ]
+            ];
+            
+            // Utiliser directement l'API de Pusher
+            $pusher = Broadcast::driver()->getPusher();
+            $pusher->trigger(
+                'test-space.' . $space->id,
+                'message.new',
+                $messageData
+            );
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Message envoyé dans l'espace {$space->title}",
+                'data' => [
+                    'id' => $message->id,
+                    'content' => $message->content,
+                    'sender' => [
+                        'id' => $sender->id,
+                        'name' => $sender->name
+                    ]
+                ]
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Espace non trouvé'], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
