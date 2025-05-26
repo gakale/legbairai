@@ -61,6 +61,8 @@ Route::middleware(['web'])->group(function () {
         Route::post('/space/{spaceId}/leave', [RealtimeTestController::class, 'triggerUserLeft'])->name('trigger.user.left');
         Route::post('/space/{spaceId}/participant/{participantId}/raise-hand', [RealtimeTestController::class, 'triggerRaiseHand'])->name('trigger.raise.hand');
         Route::post('/space/{spaceId}/participant/{participantId}/change-role', [RealtimeTestController::class, 'triggerChangeRole'])->name('trigger.change.role');
+        Route::post('/space/{spaceId}/participant/{participantId}/mute', [RealtimeTestController::class, 'testMuteParticipant'])->name('trigger.mute');
+        Route::post('/space/{spaceId}/participant/{participantId}/unmute', [RealtimeTestController::class, 'testUnmuteParticipant'])->name('trigger.unmute');
         Route::post('/space/{spaceId}/message', [RealtimeTestController::class, 'testSendMessage'])->name('trigger.message');
         Route::post('/messages/{messageId}/toggle-pin', [RealtimeTestController::class, 'testTogglePinMessage'])->name('trigger.toggle.pin');
     });

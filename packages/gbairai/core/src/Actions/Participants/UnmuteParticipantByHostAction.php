@@ -9,6 +9,8 @@ use Gbairai\Core\Models\Space;
 use Gbairai\Core\Models\SpaceParticipant;
 use Illuminate\Support\Facades\Gate;
 use RuntimeException;
+use App\Events\ParticipantMutedStatusChangedEvent; // Importer
+
 
 class UnmuteParticipantByHostAction
 {
@@ -48,7 +50,7 @@ class UnmuteParticipantByHostAction
         $targetParticipant->is_self_muted = false;
         $targetParticipant->save();
 
-        // event(new ParticipantUnmutedByHost($targetParticipant, $actor));
+        ParticipantMutedStatusChangedEvent::dispatch($targetParticipant); // Déclencher l'événement
         return $targetParticipant;
     }
 }

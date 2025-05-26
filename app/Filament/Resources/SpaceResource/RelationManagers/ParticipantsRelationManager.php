@@ -29,6 +29,8 @@ use Filament\Tables\Actions\DeleteAction as TableDeleteAction;
 use Filament\Tables\Actions\Action as TableAction;
 use Filament\Notifications\Notification;
 
+use Gbairai\Core\Actions\Participants\MuteParticipantByHostAction;
+use Gbairai\Core\Actions\Participants\UnmuteParticipantByHostAction;
 class ParticipantsRelationManager extends RelationManager
 {
     protected static string $relationship = 'participants';
@@ -226,6 +228,52 @@ class ParticipantsRelationManager extends RelationManager
                     })
                     ->visible(fn (SpaceParticipant $record): bool =>
                         ($record->role === SpaceParticipantRole::SPEAKER) &&
+                        (auth()->user()?->can('manageParticipants', $this->getOwnerRecord()) ?? false)
+                    ),
+                    TableAction::make('muteByHost')
+                    ->label('Muter (Hôte)')
+                    ->icon('heroicon-o-microphone')
+                    ->color('warning')
+                    ->requiresConfirmation()
+                    ->action(function (SpaceParticipant $record, MuteParticipantByHostAction $muteAction) {
+                        /** @var \App\Models\User $actor */
+                        $actor = auth()->user();
+                        $space = $this->getOwnerRecord();
+                        try {
+                            $muteAction->execute($actor, $space, $record->user);
+                            Notification::make()->success()->title('Participant muté')->send();
+                        } catch (\Exception $e) {
+                            Notification::make()->danger()->title('Erreur')->body($e->getMessage())->send();
+                        }
+                    })
+                    ->visible(fn (SpaceParticipant $record): bool =>
+                        !$record->is_muted_by_host &&
+                        $record->user_id !== $this->getOwnerRecord()->host_user_id && // Ne pas se muter soi-même ou l'hôte via cette action admin
+                        $record->user_id !== auth()->id() &&
+                        (auth()->user()?->can('manageParticipants', $this->getOwnerRecord()) ?? false)
+                    ),
+
+                // Action pour Démuter
+                TableAction::make('unmuteByHost')
+                    ->label('Démuter (Hôte)')
+                    ->icon('heroicon-s-microphone')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->action(function (SpaceParticipant $record, UnmuteParticipantByHostAction $unmuteAction) {
+                        /** @var \App\Models\User $actor */
+                        $actor = auth()->user();
+                        $space = $this->getOwnerRecord();
+                        try {
+                            $unmuteAction->execute($actor, $space, $record->user);
+                            Notification::make()->success()->title('Participant démuté')->send();
+                        } catch (\Exception $e) {
+                            Notification::make()->danger()->title('Erreur')->body($e->getMessage())->send();
+                        }
+                    })
+                    ->visible(fn (SpaceParticipant $record): bool =>
+                        $record->is_muted_by_host &&
+                        $record->user_id !== $this->getOwnerRecord()->host_user_id &&
+                        $record->user_id !== auth()->id() &&
                         (auth()->user()?->can('manageParticipants', $this->getOwnerRecord()) ?? false)
                     ),
 

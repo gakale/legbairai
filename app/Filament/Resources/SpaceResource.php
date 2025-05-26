@@ -164,6 +164,68 @@ class SpaceResource extends Resource
     public static function table(Table $table): Table
     {
         return $table
+            ->actions([
+                ViewAction::make()
+                    ->label('View'),
+                EditAction::make()
+                    ->label('Modifier')
+                    ->icon('heroicon-o-pencil-square'),
+                TableAction::make('start')
+                    ->label('Démarrer')
+                    ->icon('heroicon-o-play')
+                    ->color('success')
+                    ->requiresConfirmation()
+                    ->action(function (Space $record, StartSpaceAction $startSpaceAction) {
+                        /** @var \App\Models\User $user */
+                        $user = auth()->user();
+                        try {
+                            $startSpaceAction->execute($user, $record);
+                            \Filament\Notifications\Notification::make()
+                                ->title('Space démarré')
+                                ->body("Le Space '{$record->title}' a été démarré.")
+                                ->success()
+                                ->send();
+                        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+                            \Filament\Notifications\Notification::make()->danger()->title('Non autorisé')->body("Vous n'êtes pas autorisé à démarrer ce Space.")->send();
+                        } catch (\RuntimeException $e) {
+                            \Filament\Notifications\Notification::make()->danger()->title('Erreur')->body($e->getMessage())->send();
+                        }
+                    })
+                    ->visible(fn (Space $record): bool => $record->status === SpaceStatus::SCHEDULED && auth()->user()?->can('start', $record) ?? false),
+
+                TableAction::make('end')
+                    ->label('Terminer')
+                    ->icon('heroicon-o-stop')
+                    ->color('danger')
+                    ->requiresConfirmation()
+                    ->action(function (Space $record, EndSpaceAction $endSpaceAction) {
+                        /** @var \App\Models\User $user */
+                        $user = auth()->user();
+                        try {
+                            $endSpaceAction->execute($user, $record);
+                            \Filament\Notifications\Notification::make()->success()->title('Space terminé')->body("Le Space '{$record->title}' est maintenant terminé.")->send();
+                        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+                            \Filament\Notifications\Notification::make()->danger()->title('Non autorisé')->body("Vous n'êtes pas autorisé à terminer ce Space.")->send();
+                        } catch (\RuntimeException $e) {
+                            \Filament\Notifications\Notification::make()->danger()->title('Erreur')->body($e->getMessage())->send();
+                        }
+                    })
+                    ->visible(fn (Space $record): bool => $record->status === SpaceStatus::LIVE && auth()->user()?->can('end', $record) ?? false),
+
+                TableDeleteAction::make() // Utilise la policy 'delete' par défaut
+                    ->action(function (Space $record, DeleteSpaceAction $deleteSpaceAction) {
+                         /** @var \App\Models\User $user */
+                        $user = auth()->user();
+                        try {
+                            $deleteSpaceAction->execute($user, $record);
+                            \Filament\Notifications\Notification::make()->success()->title('Space supprimé')->send();
+                        } catch (\Illuminate\Auth\Access\AuthorizationException $e) {
+                            \Filament\Notifications\Notification::make()->danger()->title('Non autorisé')->body("Vous n'êtes pas autorisé à supprimer ce Space.")->send();
+                        } catch (\RuntimeException $e) { // Ou toute autre exception métier que votre action pourrait lever
+                            \Filament\Notifications\Notification::make()->danger()->title('Erreur de suppression')->body($e->getMessage())->send();
+                        }
+                    }),
+            ])
             ->columns([
                 TextColumn::make('title')
                     ->label('Titre')
@@ -318,7 +380,7 @@ class SpaceResource extends Resource
             'index' => Pages\ListSpaces::route('/'),
             'create' => Pages\CreateSpace::route('/create'),
             'edit' => Pages\EditSpace::route('/{record}/edit'),
-            //'view' => Pages\ViewSpace::route('/{record}'), // Si vous avez une page de vue dédiée
+            'view' => Pages\ViewSpace::route('/{record}'), // Si vous avez une page de vue dédiée
         ];
     }
 

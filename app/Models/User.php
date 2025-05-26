@@ -11,9 +11,10 @@ use Gbairai\Core\Concerns\InteractsWithGbairaiCore;
 use Gbairai\Core\Contracts\UserContract;
 use Illuminate\Support\Str;
 use Filament\Models\Contracts\FilamentUser;
+use Filament\Models\Contracts\HasName;
 use Laravel\Sanctum\HasApiTokens;
 
-class User extends Authenticatable implements UserContract, FilamentUser
+class User extends Authenticatable implements UserContract, FilamentUser, HasName
 {
     /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable, HasUuidPrimaryKey, InteractsWithGbairaiCore, HasApiTokens;
@@ -132,6 +133,17 @@ class User extends Authenticatable implements UserContract, FilamentUser
         // ou vérifier une adresse email spécifique
         // return str_ends_with($this->email, '@yourdomain.com') && $this->hasVerifiedEmail();
         return true;
+    }
+    
+    /**
+     * Get the name of the user for Filament.
+     * 
+     * @return string
+     */
+    public function getFilamentName(): string
+    {
+        // Utiliser le nom s'il existe, sinon le nom d'utilisateur, sinon une chaîne par défaut
+        return $this->name ?? $this->username ?? 'Utilisateur ' . substr($this->id, 0, 8);
     }
 }
 

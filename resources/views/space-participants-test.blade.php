@@ -106,6 +106,8 @@
             <a href="#" onclick="testJoinSpace(); return false;" class="btn btn-primary">Ajouter un participant</a>
             <a href="#" onclick="testRaiseHand(); return false;" class="btn btn-warning">Test lever main (après avoir ajouté un participant)</a>
             <a href="#" onclick="testChangeRole(); return false;" class="btn btn-info">Test changer rôle (après avoir ajouté un participant)</a>
+            <a href="#" onclick="testMuteParticipant(); return false;" class="btn btn-danger">Muter un participant</a>
+            <a href="#" onclick="testUnmuteParticipant(); return false;" class="btn btn-success">Démuter un participant</a>
             <a href="#" onclick="testSendMessage(); return false;" class="btn btn-success">Envoyer un message de test</a>
         </div>
         
@@ -229,6 +231,58 @@
             .catch(error => {
                 alert('Erreur: ' + error);
                 console.error('Erreur changement rôle:', error);
+            });
+        }
+        
+        function testMuteParticipant() {
+            // Demander l'ID de l'espace et du participant
+            const spaceId = prompt('Entrez l\'UUID de l\'espace:', '');
+            if (!spaceId) return;
+            
+            const participantId = prompt('Entrez l\'ID du participant:', '');
+            if (!participantId) return;
+            
+            fetch(`/realtime-test/space/${spaceId}/participant/${participantId}/mute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Résultat du mute: ' + JSON.stringify(data));
+                console.log('Réponse mute:', data);
+            })
+            .catch(error => {
+                alert('Erreur: ' + error);
+                console.error('Erreur mute:', error);
+            });
+        }
+        
+        function testUnmuteParticipant() {
+            // Demander l'ID de l'espace et du participant
+            const spaceId = prompt('Entrez l\'UUID de l\'espace:', '');
+            if (!spaceId) return;
+            
+            const participantId = prompt('Entrez l\'ID du participant:', '');
+            if (!participantId) return;
+            
+            fetch(`/realtime-test/space/${spaceId}/participant/${participantId}/unmute`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                }
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert('Résultat du unmute: ' + JSON.stringify(data));
+                console.log('Réponse unmute:', data);
+            })
+            .catch(error => {
+                alert('Erreur: ' + error);
+                console.error('Erreur unmute:', error);
             });
         }
         
@@ -417,16 +471,19 @@
             // Créer l'élément de message
             const messageElement = document.createElement('div');
             messageElement.className = 'message mb-2';
-            messageElement.dataset.messageId = message.id || message.data?.id; // Stocker l'ID du message pour référence future
+            
+            // Récupérer l'ID du message de manière plus robuste
+            // Essayer toutes les possibilités d'emplacement de l'ID
+            const messageId = message.id || message.data?.id || (typeof message === 'object' && message.hasOwnProperty('message') ? message.message.id : null);
+            console.log('ID du message pour affichage:', messageId);
+            
+            // Stocker l'ID du message pour référence future
+            messageElement.dataset.messageId = messageId;
             
             // Vérifier si le message est épinglé
             if (message.is_pinned) {
                 messageElement.classList.add('pinned-message');
             }
-            
-            // Récupérer l'ID du message de manière sécurisée
-            const messageId = message.id || message.data?.id;
-            console.log('ID du message pour affichage:', messageId);
             
             // Créer le contenu du message
             messageElement.innerHTML = `
@@ -479,32 +536,73 @@
         
         // Fonction pour mettre à jour le statut d'épinglage d'un message
         function updatePinnedStatus(message) {
+            console.log('Mise à jour du statut d\'\u00e9pinglage pour le message:', message);
+            
             const pinnedContainer = document.getElementById('pinned-message-container');
             const pinnedContent = document.getElementById('pinned-message-content');
             const unpinButton = document.getElementById('unpin-button');
             
+            // Récupérer l'ID du message de manière plus robuste
+            const messageId = message.id || message.data?.id || (typeof message === 'object' && message.hasOwnProperty('message') ? message.message.id : null);
+            const isPinned = message.is_pinned || (typeof message === 'object' && message.hasOwnProperty('message') ? message.message.is_pinned : false);
+            
+            console.log('ID du message pour mise à jour du statut:', messageId, 'Est épinglé:', isPinned);
+            
+            if (!messageId) {
+                console.error('Impossible d\'identifier le message pour la mise à jour du statut d\'\u00e9pinglage');
+                return;
+            }
+            
             // Mettre à jour tous les messages dans la liste
             const allMessages = document.querySelectorAll('.message');
             allMessages.forEach(msgElement => {
-                if (msgElement.dataset.messageId === message.id) {
-                    if (message.is_pinned) {
+                if (msgElement.dataset.messageId === messageId) {
+                    if (isPinned) {
                         msgElement.classList.add('pinned-message');
                         msgElement.style.borderLeft = '3px solid gold';
+                        
+                        // Mettre à jour le bouton d'épinglage pour montrer "Détacher"
+                        const pinButton = msgElement.querySelector('.pin-message-btn');
+                        if (pinButton) {
+                            pinButton.textContent = `📌 Détacher (ID: ${messageId})`;
+                            pinButton.onclick = function() {
+                                togglePinMessage(messageId, false);
+                            };
+                        }
                     } else {
                         msgElement.classList.remove('pinned-message');
                         msgElement.style.borderLeft = 'none';
+                        
+                        // Mettre à jour le bouton d'épinglage pour montrer "Épingler"
+                        const pinButton = msgElement.querySelector('.pin-message-btn');
+                        if (pinButton) {
+                            pinButton.textContent = `📌 Épingler (ID: ${messageId})`;
+                            pinButton.onclick = function() {
+                                togglePinMessage(messageId, true);
+                            };
+                        }
                     }
                 } else {
                     // Si un seul message peut être épinglé à la fois, détacher les autres
-                    if (message.is_pinned) {
+                    if (isPinned) {
                         msgElement.classList.remove('pinned-message');
                         msgElement.style.borderLeft = 'none';
+                        
+                        // Réinitialiser tous les autres boutons d'épinglage
+                        const pinButton = msgElement.querySelector('.pin-message-btn');
+                        if (pinButton) {
+                            const otherMsgId = msgElement.dataset.messageId;
+                            pinButton.textContent = `📌 Épingler (ID: ${otherMsgId})`;
+                            pinButton.onclick = function() {
+                                togglePinMessage(otherMsgId, true);
+                            };
+                        }
                     }
                 }
             });
             
             // Mettre à jour la section de message épinglé
-            if (message.is_pinned) {
+            if (isPinned) {
                 // Afficher le message épinglé
                 pinnedContainer.style.display = 'block';
                 pinnedContent.innerHTML = `
@@ -518,14 +616,15 @@
                 `;
                 
                 // Configurer le bouton de détachement
-                unpinButton.dataset.messageId = message.id;
+                unpinButton.dataset.messageId = messageId;
                 unpinButton.onclick = function() {
-                    togglePinMessage(message.id, false);
+                    console.log('Bouton de détachement cliqué pour le message ID:', messageId);
+                    togglePinMessage(messageId, false);
                 };
             } else {
                 // Cacher la section de message épinglé si le message a été détaché
                 if (pinnedContainer.style.display !== 'none' && 
-                    unpinButton.dataset.messageId === message.id) {
+                    unpinButton.dataset.messageId === messageId) {
                     pinnedContainer.style.display = 'none';
                     pinnedContent.innerHTML = '';
                 }
@@ -552,7 +651,24 @@
                 return;
             }
             
-            console.log('Tentative d\'épinglage du message avec ID:', messageId);
+            if (!messageId) {
+                console.error('ID de message invalide pour l\'action d\'\u00e9pinglage/détachement');
+                return;
+            }
+            
+            console.log(`Tentative de ${pin ? '\'\u00e9pinglage' : 'détachement'} du message avec ID:`, messageId);
+            
+            // Mise à jour visuelle immédiate pour donner un feedback à l'utilisateur
+            if (!pin) {
+                // Si on détache, mettre à jour l'UI immédiatement pour le bouton
+                const messageElement = document.querySelector(`.message[data-message-id="${messageId}"]`);
+                if (messageElement) {
+                    const pinButton = messageElement.querySelector('.pin-message-btn');
+                    if (pinButton) {
+                        pinButton.textContent = `📌 Épingler (ID: ${messageId})`;
+                    }
+                }
+            }
             
             // Appeler l'API de test pour épingler/détacher le message (sans authentification)
             fetch(`/realtime-test/messages/${messageId}/toggle-pin`, {
@@ -571,7 +687,33 @@
             })
             .then(data => {
                 console.log(`Message ${pin ? 'épinglé' : 'détaché'} avec succès:`, data);
-                // L'UI sera mise à jour automatiquement via l'événement WebSocket
+                // Ajouter un message de confirmation dans le chat
+                addMessageToChat({
+                    content: `${pin ? 'Message épinglé' : 'Message détaché'} avec succès!`,
+                    sender: {
+                        name: 'Système',
+                        username: 'Système'
+                    },
+                    created_at_formatted: new Date().toLocaleTimeString()
+                });
+                
+                // Si l'UI n'est pas mise à jour automatiquement via WebSocket après 1 seconde,
+                // forcer une mise à jour manuelle
+                setTimeout(() => {
+                    const messageElement = document.querySelector(`.message[data-message-id="${messageId}"]`);
+                    if (messageElement) {
+                        if (!pin && messageElement.classList.contains('pinned-message')) {
+                            // Forcer la mise à jour manuelle si le détachement n'a pas été reflété
+                            updatePinnedStatus({
+                                id: messageId,
+                                is_pinned: false,
+                                content: data.data?.content || messageElement.querySelector('.message-content')?.textContent,
+                                sender: data.data?.sender || { name: 'Utilisateur', username: 'Utilisateur' },
+                                created_at_formatted: data.data?.created_at_formatted || new Date().toLocaleTimeString()
+                            });
+                        }
+                    }
+                }, 1000);
             })
             .catch(error => {
                 console.error(`Erreur lors de l'${pin ? 'épinglage' : 'détachement'} du message:`, error);

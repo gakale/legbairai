@@ -7,6 +7,7 @@ use App\Events\UserLeftSpaceEvent;
 use App\Events\SpaceStartedEvent;
 use App\Events\UserRaisedHandEvent;
 use App\Events\ParticipantRoleChangedEvent;
+use App\Events\ParticipantMutedStatusChangedEvent;
 use App\Events\NewSpaceMessageEvent;
 use Gbairai\Core\Models\Space;
 use Gbairai\Core\Models\SpaceParticipant;
@@ -18,6 +19,8 @@ use Illuminate\Support\Facades\Broadcast;
 use Gbairai\Core\Models\SpaceMessage;
 use Gbairai\Core\Actions\Participants\RaiseHandAction;
 use Gbairai\Core\Actions\Participants\ChangeParticipantRoleAction;
+use Gbairai\Core\Actions\Participants\MuteParticipantByHostAction;
+use Gbairai\Core\Actions\Participants\UnmuteParticipantByHostAction;
 use Gbairai\Core\Enums\SpaceParticipantRole;
 
 class RealtimeTestController extends Controller
@@ -435,6 +438,124 @@ class RealtimeTestController extends Controller
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['success' => false, 'error' => 'Message ou espace non trouvé'], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Simule le mute d'un participant par l'hôte (sans authentification pour les tests)
+     * Cette méthode contourne les vérifications de sécurité pour les besoins de test
+     */
+    public function testMuteParticipant(Request $request, $spaceId, $participantId)
+    {
+        try {
+            // Récupérer l'espace et le participant
+            $space = Space::findOrFail($spaceId);
+            $participant = SpaceParticipant::findOrFail($participantId);
+            
+            // Vérifier que le participant appartient bien à cet espace
+            if ($participant->space_id !== $space->id) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Ce participant n\'appartient pas à cet espace'
+                ], 400);
+            }
+            
+            // Pour les tests, mettre directement à jour le statut du participant
+            // plutôt que d'utiliser l'action qui a des vérifications de sécurité
+            $participant->is_muted_by_host = true;
+            $participant->save();
+            
+            // Déclencher l'événement manuellement
+            ParticipantMutedStatusChangedEvent::dispatch($participant);
+            
+            // Diffuser manuellement l'événement pour les tests
+            $participantData = [
+                'participant_id' => $participant->id,
+                'user_id' => $participant->user_id,
+                'is_muted_by_host' => $participant->is_muted_by_host
+            ];
+            
+            // Utiliser directement l'API de Pusher
+            $pusher = Broadcast::driver()->getPusher();
+            $pusher->trigger(
+                'test-space.' . $space->id,
+                'participant.muted_status_changed',
+                $participantData
+            );
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Participant muté avec succès",
+                'data' => $participantData
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Espace ou participant non trouvé'], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Simule le unmute d'un participant par l'hôte (sans authentification pour les tests)
+     * Cette méthode contourne les vérifications de sécurité pour les besoins de test
+     */
+    public function testUnmuteParticipant(Request $request, $spaceId, $participantId)
+    {
+        try {
+            // Récupérer l'espace et le participant
+            $space = Space::findOrFail($spaceId);
+            $participant = SpaceParticipant::findOrFail($participantId);
+            
+            // Vérifier que le participant appartient bien à cet espace
+            if ($participant->space_id !== $space->id) {
+                return response()->json([
+                    'success' => false,
+                    'error' => 'Ce participant n\'appartient pas à cet espace'
+                ], 400);
+            }
+            
+            // Pour les tests, mettre directement à jour le statut du participant
+            // plutôt que d'utiliser l'action qui a des vérifications de sécurité
+            $participant->is_muted_by_host = false;
+            $participant->save();
+            
+            // Déclencher l'événement manuellement
+            ParticipantMutedStatusChangedEvent::dispatch($participant);
+            
+            // Diffuser manuellement l'événement pour les tests
+            $participantData = [
+                'participant_id' => $participant->id,
+                'user_id' => $participant->user_id,
+                'is_muted_by_host' => $participant->is_muted_by_host
+            ];
+            
+            // Utiliser directement l'API de Pusher
+            $pusher = Broadcast::driver()->getPusher();
+            $pusher->trigger(
+                'test-space.' . $space->id,
+                'participant.muted_status_changed',
+                $participantData
+            );
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Participant démuté avec succès",
+                'data' => $participantData
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Espace ou participant non trouvé'], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

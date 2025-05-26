@@ -14,41 +14,39 @@ Broadcast::channel('space.{spaceId}', function ($user, $spaceId) {
     /** @var \App\Models\User $user L'utilisateur authentifié qui tente de s'abonner */
     /** @var string $spaceId L'ID du Space (UUID) depuis le nom du canal */
 
-    // Tenter de récupérer le Space
     $space = Space::find($spaceId);
 
     if (!$space) {
-        return false; // Le Space n'existe pas, l'abonnement échoue
+        return false;
     }
 
-    // Vérifier si l'utilisateur est l'hôte du Space
-    if ($user->getId() === $space->host_user_id) {
-        // Retourner des données sur l'utilisateur si c'est un canal de présence (pas le cas ici)
-        // return ['id' => $user->id, 'name' => $user->username];
-        return true; // L'hôte est toujours autorisé
-    }
+    // L'utilisateur doit être l'hôte ou un participant actif pour rejoindre le canal de présence
+    $isHost = $user->getId() === $space->host_user_id;
 
-    // Vérifier si l'utilisateur est un participant actif du Space
-    $isParticipant = $space->participants()
+    $participantRecord = $space->participants()
         ->where('user_id', $user->getId())
-        ->whereNull('left_at') // Doit être actif (pas quitté)
-        ->exists();
+        ->whereNull('left_at')
+        ->first();
 
-    if ($isParticipant) {
-        // return ['id' => $user->id, 'name' => $user->username]; // Pour canal de présence
-        return true; // Le participant actif est autorisé
+    $isParticipant = $participantRecord !== null;
+
+    if ($isHost || $isParticipant) {
+        // Pour un PresenceChannel, retourner un tableau avec les infos de l'utilisateur
+        // Ces informations seront disponibles pour les autres membres du canal via .here(), .joining(), .leaving()
+        return [
+            'id' => $user->getId(), // Utiliser getId() pour la cohérence du contrat
+            'username' => $user->getUsername(), // Utiliser getUsername()
+            'avatar_url' => $user->avatar_url, // Accès direct si c'est un attribut public
+            'role' => $isHost ? 'host' : ($participantRecord ? $participantRecord->role->value : 'listener'), // Rôle dans ce space
+            // Vous pouvez ajouter d'autres infos pertinentes ici (ex: is_muted_by_host, has_raised_hand initial)
+            // 'is_muted_by_host' => $participantRecord ? $participantRecord->is_muted_by_host : true,
+            // 'has_raised_hand' => $participantRecord ? $participantRecord->has_raised_hand : false,
+        ];
     }
 
-    // Optionnellement, vérifier si l'utilisateur a une permission générale de "voir" ce space,
-    // même s'il n'est pas encore participant (ex: pour recevoir une notif que le space a démarré avant de rejoindre).
-    // Cela dépend de votre logique. Pour des événements comme "user.joined", il est plus logique
-    // que seuls ceux qui sont déjà "concernés" (participants) reçoivent.
-    // if ($user->can('view', $space)) {
-    //     return true;
-    // }
+    return false; // Non autorisé
+}, ['guards' => ['web', 'sanctum']]); // Spécifier les guards est une bonne pratique
 
-    return false; // Par défaut, non autorisé
-});
 
 
 Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
