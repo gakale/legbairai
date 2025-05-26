@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\NotificationController; // Importer
 use App\Http\Controllers\Api\V1\AudioClipApiController; // Importer pour les clips audio
 use App\Http\Controllers\Api\V1\DonationApiController; // Importer
 use App\Http\Controllers\Api\V1\UserApiController;
+use App\Http\Controllers\Webhook\PaystackWebhookController; // Importer
 
 /*
 |--------------------------------------------------------------------------
@@ -34,6 +35,7 @@ Route::group(['prefix' => 'v1', 'middleware' => ['api']], function () {
     Route::get('/test/spaces', [SpaceApiController::class, 'index'])->name('api.test.spaces.index');
     Route::post('/test/spaces/{space}/clips', [AudioClipApiController::class, 'testCreateClip'])->name('api.test.spaces.clips.store');
 });
+Route::post('/v1/webhooks/paystack', [PaystackWebhookController::class, 'handle'])->name('webhooks.paystack');
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
     Route::get('/user', function (Request $request) {

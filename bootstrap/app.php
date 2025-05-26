@@ -17,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
             \Laravel\Sanctum\Http\Middleware\EnsureFrontendRequestsAreStateful::class,
             'throttle:api',
             \Illuminate\Routing\Middleware\SubstituteBindings::class,
+
         ]);
         
         // Define the Accept: application/json header for API routes
@@ -30,5 +31,16 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
-        //
+        // Configure any exception handling for routes like Paystack webhooks here
+        // For example, to ignore specific routes in exception reporting:
+        // $exceptions->dontReport([
+        //     \App\Exceptions\PaystackWebhookException::class,
+            // ]);
+        
+        // Or to customize responses for specific routes:
+        $exceptions->renderable(function (\Throwable $e, \Illuminate\Http\Request $request) {
+            if ($request->is('api/v1/webhooks/paystack')) {
+                return response()->json(['error' => 'Webhook Error'], 500);
+            }
+        });
     })->create();
