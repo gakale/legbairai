@@ -1,28 +1,30 @@
-import './bootstrap';
-
 import React from 'react';
-import { createRoot } from 'react-dom/client';
-import RealtimeSpaceTest from './components/RealtimeSpaceTest';
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Layout from './components/Layout';
+import HomePage from './pages/HomePage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+import SpaceDetailPage from './pages/SpaceDetailPage';
+import UserProfilePage from './pages/UserProfilePage';
 
-// ID du space en direct que nous avons testé précédemment
-const spaceId = '7b398b36-9195-4cb6-8a8d-478cb1ccc9fe';
+function App() {
+    console.log("[App.jsx] - Le composant App est en cours de rendu.");
+    return (
+        <Router>
+            <Routes>
+                <Route path="/" element={<Layout />}>
+                    <Route index element={<HomePage />} />
+                    <Route path="login" element={<LoginPage />} />
+                    <Route path="register" element={<RegisterPage />} />
+                    <Route path="space/:spaceId" element={<SpaceDetailPage />} />
+                    <Route path="profile/:userId" element={<UserProfilePage />} />
+                    <Route path="*" element={<NotFoundPage />} />
+                </Route>
+            </Routes>
+        </Router>
+    );
+}
 
-// Fonction pour initialiser l'application React
-const initReactApp = () => {
-    const container = document.getElementById('realtime-space-test');
-    
-    if (container) {
-        const root = createRoot(container);
-        root.render(
-            <React.StrictMode>
-                <RealtimeSpaceTest spaceIdToListen={spaceId} />
-            </React.StrictMode>
-        );
-        console.log('Composant React monté avec succès pour le space ID:', spaceId);
-    } else {
-        console.error('Élément #realtime-space-test non trouvé dans le DOM');
-    }
-};
+const NotFoundPage = () => <div className="text-center py-20"><h2>404 - Page Non Trouvée</h2></div>;
 
-// Initialiser l'application React une fois que le DOM est chargé
-document.addEventListener('DOMContentLoaded', initReactApp);
+export default App; // Assurez-vous que App est exporté par défaut

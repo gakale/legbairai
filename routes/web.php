@@ -9,9 +9,6 @@ use App\Events\SpaceStartedEvent;
 use Gbairai\Core\Models\Space;
 use App\Http\Controllers\RealtimeTestController;
 
-Route::get('/', function () {
-    return view('welcome');
-});
 
 /**
  * Route de test pour la création d'un Space
@@ -84,3 +81,6 @@ Route::middleware(['web'])->group(function () {
         Route::post('/notifications/send-follower', [RealtimeTestController::class, 'testSendFollowerNotification'])->name('trigger.notification.follower');
     });
 });
+Route::get('/{any?}', function () {
+    return view('app'); // Ou 'welcome' si vous avez modifié welcome.blade.php
+})->where('any', '.*');
