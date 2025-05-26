@@ -51,11 +51,26 @@ Route::middleware('web')->withoutMiddleware(['csrf'])->post('/test-create-space'
     }
 });
 
+// Route de test pour l'authentification des canaux privés (pour les tests uniquement)
+Route::post('/broadcasting/auth-test', function () {
+    // Cette route permet de contourner l'authentification standard pour les tests
+    // Elle renvoie une réponse d'autorisation valide pour n'importe quel canal
+    $channelName = request()->input('channel_name');
+    $socketId = request()->input('socket_id');
+    
+    // Générer une réponse d'autorisation valide
+    $pusher = Broadcast::driver()->getPusher();
+    $response = $pusher->socketAuth($channelName, $socketId);
+    
+    return response()->json(json_decode($response, true));
+})->middleware(['web', 'throttle:60,1'])->name('broadcasting.auth.test');
+
 Route::middleware(['web'])->group(function () {
     // Routes pour les tests en temps réel (déclenchement d'événements)
     Route::prefix('realtime-test')->name('realtime.test.')->group(function () {
         Route::get('/', [RealtimeTestController::class, 'showRealtimeTest'])->name('show');
         Route::get('/participants', [RealtimeTestController::class, 'showParticipantsTest'])->name('participants.show');
+        Route::get('/notifications', [RealtimeTestController::class, 'showNotificationsTest'])->name('notifications.show');
         Route::post('/space/{spaceId}/start', [RealtimeTestController::class, 'triggerSpaceStarted'])->name('trigger.space.started');
         Route::post('/space/{spaceId}/join', [RealtimeTestController::class, 'triggerUserJoined'])->name('trigger.user.joined');
         Route::post('/space/{spaceId}/leave', [RealtimeTestController::class, 'triggerUserLeft'])->name('trigger.user.left');
@@ -65,5 +80,6 @@ Route::middleware(['web'])->group(function () {
         Route::post('/space/{spaceId}/participant/{participantId}/unmute', [RealtimeTestController::class, 'testUnmuteParticipant'])->name('trigger.unmute');
         Route::post('/space/{spaceId}/message', [RealtimeTestController::class, 'testSendMessage'])->name('trigger.message');
         Route::post('/messages/{messageId}/toggle-pin', [RealtimeTestController::class, 'testTogglePinMessage'])->name('trigger.toggle.pin');
+        Route::post('/notifications/send-follower', [RealtimeTestController::class, 'testSendFollowerNotification'])->name('trigger.notification.follower');
     });
 });

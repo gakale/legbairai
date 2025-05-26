@@ -7,6 +7,8 @@ namespace Gbairai\Core\Actions\Users;
 use Gbairai\Core\Contracts\UserContract;
 use Gbairai\Core\Models\Follow;
 use RuntimeException;
+use App\Notifications\NewFollowerNotification; // Importer la notification
+use App\Models\User as AppUserModel; // Importer le modèle User de l'application pour notifier
 
 class FollowUserAction
 {
@@ -34,7 +36,10 @@ class FollowUserAction
         // event(new UserStartedFollowing($follower, $userToFollow));
         // Notification pour $userToFollow
         // $userToFollow->notify(new NewFollowerNotification($follower));
-
+        if ($userToFollow instanceof AppUserModel && $follower instanceof AppUserModel) {
+            $userToFollow->notify(new NewFollowerNotification($follower));
+        }
+        
         return $follow;
     }
 }

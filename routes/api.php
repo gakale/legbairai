@@ -4,6 +4,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\SpaceApiController;
 use App\Http\Controllers\Api\V1\UserSpaceInteractionApiController;
+use App\Http\Controllers\Api\V1\NotificationController; // Importer
 
 /*
 |--------------------------------------------------------------------------
@@ -64,6 +65,13 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
     Route::prefix('v1/users')->name('api.v1.users.')->group(function () {
         Route::post('/{user}/follow', [App\Http\Controllers\Api\V1\UserApiController::class, 'follow'])->name('follow');
         Route::delete('/{user}/unfollow', [App\Http\Controllers\Api\V1\UserApiController::class, 'unfollow'])->name('unfollow');
+    });
+
+    // --- Routes pour les Notifications ---
+    Route::prefix('v1/notifications')->name('api.v1.notifications.')->group(function () {
+        Route::get('/', [NotificationController::class, 'index'])->name('index');
+        Route::patch('/{notification}/read', [NotificationController::class, 'markAsRead'])->name('markAsRead'); // Utiliser PATCH pour mettre à jour une ressource
+        Route::post('/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('markAllAsRead');
     });
 });
 Route::get('/v1/users/{user}', [UserApiController::class, 'show'])->name('api.v1.users.show.public');

@@ -16,6 +16,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Broadcast;
+use App\Notifications\NewFollowerNotification;
 use Gbairai\Core\Models\SpaceMessage;
 use Gbairai\Core\Actions\Participants\RaiseHandAction;
 use Gbairai\Core\Actions\Participants\ChangeParticipantRoleAction;
@@ -42,6 +43,17 @@ class RealtimeTestController extends Controller
         $spaces = Space::take(5)->get(['id', 'title', 'host_user_id']);
         
         return view('space-participants-test', compact('spaces'));
+    }
+
+    /**
+     * Affiche la page de test des notifications
+     */
+    public function showNotificationsTest()
+    {
+        // Récupérer quelques utilisateurs pour les tests
+        $users = User::latest()->take(5)->get();
+        
+        return view('notifications-test', compact('users'));
     }
 
     /**
@@ -556,6 +568,50 @@ class RealtimeTestController extends Controller
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['success' => false, 'error' => 'Espace ou participant non trouvé'], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Simule l'envoi d'une notification de nouvel abonné (sans authentification pour les tests)
+     */
+    public function testSendFollowerNotification(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'follower_id' => 'required|exists:users,id',
+                'target_id' => 'required|exists:users,id',
+            ]);
+            
+            // Récupérer les utilisateurs
+            $follower = User::findOrFail($validated['follower_id']);
+            $target = User::findOrFail($validated['target_id']);
+            
+            // Envoyer la notification directement
+            $target->notify(new NewFollowerNotification($follower));
+            
+            return response()->json([
+                'success' => true,
+                'message' => "Notification de nouvel abonné envoyée avec succès",
+                'data' => [
+                    'follower' => [
+                        'id' => $follower->id,
+                        'name' => $follower->name
+                    ],
+                    'target' => [
+                        'id' => $target->id,
+                        'name' => $target->name
+                    ]
+                ]
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Utilisateur non trouvé'], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
