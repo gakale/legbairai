@@ -142,6 +142,14 @@ class Space extends Model
     {
         return $this->hasOne(config('gbairai-core.models.space_recording'), 'space_id');
     }
+    
+    /**
+     * Get the audio clips associated with this Space.
+     */
+    public function audioClips(): HasMany
+    {
+        return $this->hasMany(config('gbairai-core.models.audio_clip'), 'space_id');
+    }
 
     // TODO: Ajouter Scopes (live(), scheduled(), ended(), etc.)
     // TODO: Ajouter des accesseurs/mutateurs si nécessaire (ex: isLive(), durationForHumans())

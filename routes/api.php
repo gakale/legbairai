@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\SpaceApiController;
 use App\Http\Controllers\Api\V1\UserSpaceInteractionApiController;
 use App\Http\Controllers\Api\V1\NotificationController; // Importer
+use App\Http\Controllers\Api\V1\AudioClipApiController; // Importer pour les clips audio
 
 /*
 |--------------------------------------------------------------------------
@@ -26,6 +27,10 @@ Route::group(['prefix' => 'v1', 'middleware' => ['api']], function () {
     Route::get('/csrf-cookie', function() {
         return response()->json(['message' => 'CSRF cookie set']);
     });
+    
+    // Routes spéciales pour les tests (sans authentification)
+    Route::get('/test/spaces', [SpaceApiController::class, 'index'])->name('api.test.spaces.index');
+    Route::post('/test/spaces/{space}/clips', [AudioClipApiController::class, 'testCreateClip'])->name('api.test.spaces.clips.store');
 });
 
 Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
@@ -59,6 +64,9 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
         Route::post('/{space}/message', [UserSpaceInteractionApiController::class, 'sendMessage'])->name('message');
 
         Route::post('/messages/{spaceMessage}/toggle-pin', [UserSpaceInteractionApiController::class, 'togglePinMessage'])->name('messages.togglePin');
+        
+        // Routes pour les Clips Audio (création liée à un Space)
+        Route::post('/{space}/clips', [AudioClipApiController::class, 'store'])->name('clips.store');
     });
 
     // --- Routes pour les Utilisateurs (Profils, Suivi) ---

@@ -71,6 +71,7 @@ Route::middleware(['web'])->group(function () {
         Route::get('/', [RealtimeTestController::class, 'showRealtimeTest'])->name('show');
         Route::get('/participants', [RealtimeTestController::class, 'showParticipantsTest'])->name('participants.show');
         Route::get('/notifications', [RealtimeTestController::class, 'showNotificationsTest'])->name('notifications.show');
+        Route::get('/spaces-feed', [RealtimeTestController::class, 'showSpacesFeedTest'])->name('spaces.feed.show');
         Route::post('/space/{spaceId}/start', [RealtimeTestController::class, 'triggerSpaceStarted'])->name('trigger.space.started');
         Route::post('/space/{spaceId}/join', [RealtimeTestController::class, 'triggerUserJoined'])->name('trigger.user.joined');
         Route::post('/space/{spaceId}/leave', [RealtimeTestController::class, 'triggerUserLeft'])->name('trigger.user.left');

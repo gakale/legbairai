@@ -145,5 +145,17 @@ class User extends Authenticatable implements UserContract, FilamentUser, HasNam
         // Utiliser le nom s'il existe, sinon le nom d'utilisateur, sinon une chaîne par défaut
         return $this->name ?? $this->username ?? 'Utilisateur ' . substr($this->id, 0, 8);
     }
+    
+    /**
+     * Get the audio clips created by this user.
+     * 
+     * @return \Illuminate\Database\Eloquent\Relations\HasMany
+     */
+    public function createdAudioClips(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        // Cette méthode est déjà implémentée dans le trait InteractsWithGbairaiCore,
+        // mais nous devons l'implémenter explicitement ici car elle est déclarée dans l'interface UserContract
+        return $this->hasMany(config('gbairai-core.models.audio_clip'), 'creator_user_id');
+    }
 }
 

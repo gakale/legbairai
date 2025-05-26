@@ -39,6 +39,7 @@ return [
         'subscriptions' => 'subscriptions',
         'subscription_plans' => 'subscription_plans',
         'notifications' => 'notifications',
+        'audio_clips' => 'audio_clips',
     ],
 
     /*
@@ -57,6 +58,7 @@ return [
         'space_message' => \Gbairai\Core\Models\SpaceMessage::class, 
         'space_recording' => \Gbairai\Core\Models\SpaceRecording::class, 
         'follow' => \Gbairai\Core\Models\Follow::class,
+        'audio_clip' => \Gbairai\Core\Models\AudioClip::class,
     ],
 
     /*

@@ -7,6 +7,7 @@ namespace Gbairai\Core\Concerns;
 use Gbairai\Core\Models\Space;
 use Gbairai\Core\Models\SpaceMessage;
 use Gbairai\Core\Models\SpaceParticipant;
+use Gbairai\Core\Models\AudioClip; // Importer pour les clips audio
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Gbairai\Core\Contracts\UserContract; // Importer
 use Gbairai\Core\Models\Follow; // Importer
@@ -73,5 +74,13 @@ trait InteractsWithGbairaiCore
             return $this->followings->contains($userToFollow);
         }
         return $this->followings()->where(config('gbairai-core.table_names.follows') . '.following_user_id', $userToFollow->getId())->exists();
+    }
+    
+    /**
+     * Get the audio clips created by this user.
+     */
+    public function createdAudioClips(): HasMany
+    {
+        return $this->hasMany(config('gbairai-core.models.audio_clip'), 'creator_user_id');
     }
 }

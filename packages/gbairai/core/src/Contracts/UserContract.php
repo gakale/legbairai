@@ -22,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property-read \Illuminate\Database\Eloquent\Collection|\Gbairai\Core\Models\User[] $followings // MODIFIÉ ICI
  * @property-read int|null $followers_count
  * @property-read int|null $followings_count
+ * @property-read \Illuminate\Database\Eloquent\Collection|\Gbairai\Core\Models\AudioClip[] $createdAudioClips
  */
 interface UserContract
 {
@@ -37,6 +38,9 @@ interface UserContract
     // Relations de suivi
     public function followers(): BelongsToMany; // Ceux qui suivent cet utilisateur (Correct)
     public function followings(): BelongsToMany; // MODIFIÉ ICI : Ceux que cet utilisateur suit
+    
+    // Relations avec les clips audio
+    public function createdAudioClips(): HasMany;
 
     public function isFollowing(UserContract $userToFollow): bool;
 }

@@ -55,6 +55,14 @@ class RealtimeTestController extends Controller
         
         return view('notifications-test', compact('users'));
     }
+    
+    /**
+     * Affiche la page de test du feed des espaces
+     */
+    public function showSpacesFeedTest()
+    {
+        return view('spaces-feed-test');
+    }
 
     /**
      * Déclenche l'événement SpaceStartedEvent pour un space spécifique
