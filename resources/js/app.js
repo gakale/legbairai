@@ -3,24 +3,45 @@ import './bootstrap';
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import RealtimeSpaceTest from './components/RealtimeSpaceTest';
+import SpaceViewComponent from './components/SpaceViewComponent';
 
-// ID du space en direct que nous avons testé précédemment
-const spaceId = '7b398b36-9195-4cb6-8a8d-478cb1ccc9fe';
+// L'ID du space sera récupéré depuis l'attribut data-space-id
 
 // Fonction pour initialiser l'application React
 const initReactApp = () => {
-    const container = document.getElementById('realtime-space-test');
-    
-    if (container) {
-        const root = createRoot(container);
-        root.render(
+    // Initialisation du composant RealtimeSpaceTest
+    const realtimeContainer = document.getElementById('realtime-space-test');
+    if (realtimeContainer) {
+        const realtimeRoot = createRoot(realtimeContainer);
+        realtimeRoot.render(
             React.createElement(React.StrictMode, null,
                 React.createElement(RealtimeSpaceTest, { spaceIdToListen: spaceId })
             )
         );
-        console.log('Composant React monté avec succès pour le space ID:', spaceId);
-    } else {
-        console.error('Élément #realtime-space-test non trouvé dans le DOM');
+        console.log('Composant RealtimeSpaceTest monté avec succès pour le space ID:', spaceId);
+    }
+    
+    // Initialisation du composant SpaceViewComponent
+    const spaceViewContainer = document.getElementById('space-participants-test');
+    if (spaceViewContainer) {
+        // Récupérer l'ID du space depuis l'attribut data-space-id
+        const spaceIdToUse = spaceViewContainer.getAttribute('data-space-id') || '1';
+        
+        const spaceViewRoot = createRoot(spaceViewContainer);
+        spaceViewRoot.render(
+            React.createElement(React.StrictMode, null,
+                React.createElement(SpaceViewComponent, { 
+                    spaceId: spaceIdToUse,
+                    currentUserId: window.currentUserId || null
+                })
+            )
+        );
+        console.log('Composant SpaceViewComponent monté avec succès pour le space ID:', spaceIdToUse);
+    }
+    
+    // Afficher un message si aucun conteneur n'est trouvé
+    if (!realtimeContainer && !spaceViewContainer) {
+        console.error('Aucun conteneur React trouvé dans le DOM');
     }
 };
 

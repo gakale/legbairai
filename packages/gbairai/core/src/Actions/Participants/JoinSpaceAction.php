@@ -12,6 +12,8 @@ use Gbairai\Core\Models\SpaceParticipant;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Gate;
 use RuntimeException;
+use App\Events\UserJoinedSpaceEvent; // Importer
+
 
 /**
  * Class JoinSpaceAction
@@ -89,7 +91,7 @@ class JoinSpaceAction
 
         // 4. Logique post- ज्वाइन
         // - Déclencher un événement UserJoinedSpace
-        //   event(new UserJoinedSpace($participant));
+        UserJoinedSpaceEvent::dispatch($participant); // Déclencher l'événement
         // - Mettre à jour le compteur de participants en temps réel (via WebSockets)
 
         return $participant;

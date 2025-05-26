@@ -9,8 +9,10 @@ use Gbairai\Core\Enums\SpaceParticipantRole;
 use Gbairai\Core\Enums\SpaceStatus;
 use Gbairai\Core\Models\Space;
 use Gbairai\Core\Models\SpaceParticipant;
-use Illuminate\Support\Facades\Gate; // Pour une potentielle policy
+//use Illuminate\Support\Facades\Gate; // Pour une potentielle policy
 use RuntimeException;
+use App\Events\UserRaisedHandEvent; // Importer l'événement
+
 
 /**
  * Class RaiseHandAction
@@ -70,7 +72,7 @@ class RaiseHandAction
 
         // 3. Logique post-"main levée"
         // - Déclencher un événement UserRaisedHand
-        //   event(new UserRaisedHand($participant));
+        UserRaisedHandEvent::dispatch($participant, $newHandStatus);
         // - Notifier l'hôte et les co-hôtes (via WebSockets).
 
         return $participant;

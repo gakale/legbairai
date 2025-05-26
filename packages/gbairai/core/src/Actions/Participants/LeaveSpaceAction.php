@@ -9,6 +9,7 @@ use Gbairai\Core\Models\Space;
 use Gbairai\Core\Models\SpaceParticipant;
 use Illuminate\Support\Carbon;
 use RuntimeException;
+use App\Events\UserLeftSpaceEvent;
 // Pas besoin de Gate ici, car si on est participant, on devrait pouvoir quitter.
 // Sauf si l'hôte ne peut pas quitter sans terminer le space (règle spéciale).
 
@@ -64,7 +65,7 @@ class LeaveSpaceAction
 
         // Logique post-départ
         // - Déclencher un événement UserLeftSpace
-        //   event(new UserLeftSpace($participant));
+        UserLeftSpaceEvent::dispatch($participant); // Déclencher l'événement
         // - Mettre à jour le compteur de participants en temps réel.
         // - Si c'était le dernier co-hôte ou intervenant, des logiques spécifiques pourraient s'appliquer.
 

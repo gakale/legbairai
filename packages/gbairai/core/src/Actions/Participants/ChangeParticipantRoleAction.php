@@ -10,6 +10,7 @@ use Gbairai\Core\Models\Space;
 use Gbairai\Core\Models\SpaceParticipant;
 use Illuminate\Support\Facades\Gate;
 use RuntimeException;
+use App\Events\ParticipantRoleChangedEvent; // Importer l'événement
 
 /**
  * Class ChangeParticipantRoleAction
@@ -95,7 +96,7 @@ class ChangeParticipantRoleAction
 
         // Logique post-changement de rôle
         // - Déclencher un événement ParticipantRoleChanged
-        //   event(new ParticipantRoleChanged($targetParticipant, $oldRole, $actor));
+        ParticipantRoleChangedEvent::dispatch($targetParticipant, $oldRole);
         // - Mettre à jour l'UI des participants en temps réel.
 
         return $targetParticipant;

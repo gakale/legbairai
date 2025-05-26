@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Support\Facades\Log;
 use App\Events\SpaceStartedEvent;
 use Gbairai\Core\Models\Space;
+use App\Http\Controllers\RealtimeTestController;
 
 Route::get('/', function () {
     return view('welcome');
@@ -50,23 +51,15 @@ Route::middleware('web')->withoutMiddleware(['csrf'])->post('/test-create-space'
     }
 });
 
-// Route pour la page de test en temps réel
-Route::get('/realtime-test', function () {
-    return view('realtime-test');
-});
-
-// Route pour déclencher manuellement l'événement SpaceStartedEvent (pour les tests)
-Route::get('/trigger-space-event/{spaceId}', function ($spaceId) {
-    $space = Space::find($spaceId);
-    
-    if (!$space) {
-        return response()->json(['error' => 'Space non trouvé'], 404);
-    }
-    
-    SpaceStartedEvent::dispatch($space);
-    
-    return response()->json([
-        'success' => true,
-        'message' => "Événement SpaceStartedEvent déclenché pour le space {$space->title}"
-    ]);
+Route::middleware(['web'])->group(function () {
+    // Routes pour les tests en temps réel (déclenchement d'événements)
+    Route::prefix('realtime-test')->name('realtime.test.')->group(function () {
+        Route::get('/', [RealtimeTestController::class, 'showRealtimeTest'])->name('show');
+        Route::get('/participants', [RealtimeTestController::class, 'showParticipantsTest'])->name('participants.show');
+        Route::post('/space/{spaceId}/start', [RealtimeTestController::class, 'triggerSpaceStarted'])->name('trigger.space.started');
+        Route::post('/space/{spaceId}/join', [RealtimeTestController::class, 'triggerUserJoined'])->name('trigger.user.joined');
+        Route::post('/space/{spaceId}/leave', [RealtimeTestController::class, 'triggerUserLeft'])->name('trigger.user.left');
+        Route::post('/space/{spaceId}/participant/{participantId}/raise-hand', [RealtimeTestController::class, 'triggerRaiseHand'])->name('trigger.raise.hand');
+        Route::post('/space/{spaceId}/participant/{participantId}/change-role', [RealtimeTestController::class, 'triggerChangeRole'])->name('trigger.change.role');
+    });
 });
