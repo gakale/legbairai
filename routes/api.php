@@ -56,6 +56,8 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
 
         // Envoi de messages dans un Space
         Route::post('/{space}/message', [UserSpaceInteractionApiController::class, 'sendMessage'])->name('message');
+
+        Route::post('/messages/{spaceMessage}/toggle-pin', [UserSpaceInteractionApiController::class, 'togglePinMessage'])->name('messages.togglePin');
     });
 
     // --- Routes pour les Utilisateurs (Profils, Suivi) ---

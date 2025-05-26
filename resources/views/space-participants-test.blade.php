@@ -112,6 +112,15 @@
         <!-- Section de chat directe (sans React) -->
         <div class="chat-section mt-4 mb-4">
             <h3>Chat (sans React)</h3>
+            
+            <!-- Message épinglé -->
+            <div id="pinned-message-container" style="display: none; border: 2px solid gold; padding: 10px; margin-bottom: 10px; background-color: #fffdf0;">
+                <div class="d-flex justify-content-between align-items-center">
+                    <strong>📌 Message épinglé</strong>
+                    <button id="unpin-button" class="btn btn-sm btn-warning">Détacher</button>
+                </div>
+                <div id="pinned-message-content" class="mt-2"></div>
+            </div>
             <div class="card">
                 <div class="card-body">
                     <div class="mb-3">
@@ -121,6 +130,16 @@
                             <button onclick="subscribeToSpace()" class="btn btn-secondary">Se connecter</button>
                         </div>
                         <div id="connection-status" class="mt-2">Non connecté</div>
+                    </div>
+                    
+                    <!-- Section de test pour l'épinglage -->
+                    <div class="mb-3 p-2" style="background-color: #f8f9fa; border-radius: 5px;">
+                        <h5>Test d'épinglage direct</h5>
+                        <div class="input-group mb-2">
+                            <input type="text" id="message-id-to-pin" class="form-control" placeholder="ID du message à épingler">
+                            <button onclick="testPinMessage()" class="btn btn-warning">Tester épinglage</button>
+                        </div>
+                        <small class="text-muted">Copiez l'ID d'un message depuis la console et collez-le ici pour tester l'épinglage direct.</small>
                     </div>
                     <div id="chat-messages" style="height: 200px; overflow-y: scroll; border: 1px solid #ddd; padding: 10px; margin-bottom: 10px;">
                         <p class="text-muted">Aucun message pour le moment.</p>
@@ -376,11 +395,17 @@
                 .listen('message.new', (eventData) => {
                     console.log('Événement "message.new" reçu:', eventData);
                     addMessageToChat(eventData.message);
+                })
+                .listen('message.pinned_status_changed', (eventData) => {
+                    console.log('Événement "message.pinned_status_changed" reçu:', eventData);
+                    updatePinnedStatus(eventData.message);
                 });
         }
         
         // Fonction pour ajouter un message au chat
         function addMessageToChat(message) {
+            console.log('Message reçu:', message);
+            
             const chatMessages = document.getElementById('chat-messages');
             
             // Supprimer le message "Aucun message" s'il existe
@@ -392,6 +417,18 @@
             // Créer l'élément de message
             const messageElement = document.createElement('div');
             messageElement.className = 'message mb-2';
+            messageElement.dataset.messageId = message.id || message.data?.id; // Stocker l'ID du message pour référence future
+            
+            // Vérifier si le message est épinglé
+            if (message.is_pinned) {
+                messageElement.classList.add('pinned-message');
+            }
+            
+            // Récupérer l'ID du message de manière sécurisée
+            const messageId = message.id || message.data?.id;
+            console.log('ID du message pour affichage:', messageId);
+            
+            // Créer le contenu du message
             messageElement.innerHTML = `
                 <div style="display: flex; justify-content: space-between;">
                     <strong>${message.sender?.username || message.sender?.name || 'Anonyme'}</strong>
@@ -400,6 +437,11 @@
                 <div style="background-color: #f1f0f0; padding: 8px; border-radius: 5px; margin-top: 5px;">
                     ${message.content}
                 </div>
+                <div class="message-actions mt-1 text-right">
+                    <button class="btn btn-sm btn-outline-primary pin-message-btn" data-message-id="${messageId}">
+                        📌 Épingler (ID: ${messageId})
+                    </button>
+                </div>
             `;
             
             // Ajouter le message au chat
@@ -407,6 +449,141 @@
             
             // Faire défiler vers le bas
             chatMessages.scrollTop = chatMessages.scrollHeight;
+            
+            // Ajouter l'écouteur d'événement pour le bouton d'épinglage
+            const pinButton = messageElement.querySelector('.pin-message-btn');
+            pinButton.addEventListener('click', function() {
+                // Récupérer l'ID du message depuis l'attribut data-message-id du bouton
+                const messageId = this.getAttribute('data-message-id');
+                console.log('Bouton épingler cliqué pour le message ID:', messageId);
+                if (messageId) {
+                    togglePinMessage(messageId, true);
+                } else {
+                    console.error('Impossible d\'obtenir l\'ID du message pour l\'action d\'\u00e9pinglage');
+                    addMessageToChat({
+                        content: `Erreur: Impossible d'identifier le message à épingler`,
+                        sender: {
+                            name: 'Système',
+                            username: 'Système'
+                        },
+                        created_at_formatted: new Date().toLocaleTimeString()
+                    });
+                }
+            });
+            
+            // Si le message est épinglé, mettre à jour la section de message épinglé
+            if (message.is_pinned) {
+                updatePinnedStatus(message);
+            }
+        }
+        
+        // Fonction pour mettre à jour le statut d'épinglage d'un message
+        function updatePinnedStatus(message) {
+            const pinnedContainer = document.getElementById('pinned-message-container');
+            const pinnedContent = document.getElementById('pinned-message-content');
+            const unpinButton = document.getElementById('unpin-button');
+            
+            // Mettre à jour tous les messages dans la liste
+            const allMessages = document.querySelectorAll('.message');
+            allMessages.forEach(msgElement => {
+                if (msgElement.dataset.messageId === message.id) {
+                    if (message.is_pinned) {
+                        msgElement.classList.add('pinned-message');
+                        msgElement.style.borderLeft = '3px solid gold';
+                    } else {
+                        msgElement.classList.remove('pinned-message');
+                        msgElement.style.borderLeft = 'none';
+                    }
+                } else {
+                    // Si un seul message peut être épinglé à la fois, détacher les autres
+                    if (message.is_pinned) {
+                        msgElement.classList.remove('pinned-message');
+                        msgElement.style.borderLeft = 'none';
+                    }
+                }
+            });
+            
+            // Mettre à jour la section de message épinglé
+            if (message.is_pinned) {
+                // Afficher le message épinglé
+                pinnedContainer.style.display = 'block';
+                pinnedContent.innerHTML = `
+                    <div>
+                        <strong>${message.sender?.username || message.sender?.name || 'Anonyme'}</strong>
+                        <small style="color: gray;">${message.created_at_formatted || new Date().toLocaleTimeString()}</small>
+                    </div>
+                    <div style="margin-top: 5px;">
+                        ${message.content}
+                    </div>
+                `;
+                
+                // Configurer le bouton de détachement
+                unpinButton.dataset.messageId = message.id;
+                unpinButton.onclick = function() {
+                    togglePinMessage(message.id, false);
+                };
+            } else {
+                // Cacher la section de message épinglé si le message a été détaché
+                if (pinnedContainer.style.display !== 'none' && 
+                    unpinButton.dataset.messageId === message.id) {
+                    pinnedContainer.style.display = 'none';
+                    pinnedContent.innerHTML = '';
+                }
+            }
+        }
+        
+        // Fonction de test pour épingler un message avec un ID spécifique
+        function testPinMessage() {
+            const messageId = document.getElementById('message-id-to-pin').value.trim();
+            if (!messageId) {
+                alert('Veuillez entrer un ID de message valide');
+                return;
+            }
+            
+            console.log('Test d\'\u00e9pinglage pour le message ID:', messageId);
+            togglePinMessage(messageId, true);
+        }
+        
+        // Fonction pour épingler ou détacher un message
+        function togglePinMessage(messageId, pin) {
+            const spaceId = document.getElementById('current-space-id').value.trim();
+            if (!spaceId) {
+                alert('Veuillez d\'abord vous connecter à un espace');
+                return;
+            }
+            
+            console.log('Tentative d\'épinglage du message avec ID:', messageId);
+            
+            // Appeler l'API de test pour épingler/détacher le message (sans authentification)
+            fetch(`/realtime-test/messages/${messageId}/toggle-pin`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+                },
+                body: JSON.stringify({ pin: pin })
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Erreur HTTP: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log(`Message ${pin ? 'épinglé' : 'détaché'} avec succès:`, data);
+                // L'UI sera mise à jour automatiquement via l'événement WebSocket
+            })
+            .catch(error => {
+                console.error(`Erreur lors de l'${pin ? 'épinglage' : 'détachement'} du message:`, error);
+                addMessageToChat({
+                    content: `Erreur: ${error.message}`,
+                    sender: {
+                        name: 'Système',
+                        username: 'Système'
+                    },
+                    created_at_formatted: new Date().toLocaleTimeString()
+                });
+            });
         }
         
         // Initialiser le bouton de copie

@@ -13,6 +13,8 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\Auth;
 use Gbairai\Core\Actions\Messages\SendSpaceMessageAction; // Importer
 use App\Http\Resources\SpaceMessageResource; 
+use Gbairai\Core\Models\SpaceMessage; // Importer
+use Gbairai\Core\Actions\Messages\PinSpaceMessageAction; // Importer
 
 class UserSpaceInteractionApiController extends Controller
 {
@@ -98,5 +100,24 @@ class UserSpaceInteractionApiController extends Controller
         // Le client recevra le message via WebSocket.
         // On retourne le message créé en réponse à la requête POST pour confirmation.
         return response()->json(new SpaceMessageResource($message), 201);
+    }
+    public function togglePinMessage(
+        Request $request,
+        SpaceMessage $spaceMessage, // Model binding pour le message
+        PinSpaceMessageAction $pinMessageAction
+    ): JsonResponse {
+        $validatedData = $request->validate([
+            'pin' => ['required', 'boolean'], // true pour épingler, false pour détacher
+        ]);
+
+        // L'autorisation est gérée dans PinSpaceMessageAction
+        $updatedMessage = $pinMessageAction->execute(
+            Auth::user(),
+            $spaceMessage,
+            $validatedData['pin']
+        );
+
+        // L'événement est déjà déclenché par l'action.
+        return response()->json(new SpaceMessageResource($updatedMessage));
     }
 }

@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Broadcast;
+use Gbairai\Core\Models\SpaceMessage;
 use Gbairai\Core\Actions\Participants\RaiseHandAction;
 use Gbairai\Core\Actions\Participants\ChangeParticipantRoleAction;
 use Gbairai\Core\Enums\SpaceParticipantRole;
@@ -363,6 +364,77 @@ class RealtimeTestController extends Controller
             ]);
         } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
             return response()->json(['success' => false, 'error' => 'Espace non trouvé'], 404);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'error' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
+    
+    /**
+     * Simule l'épinglage ou le détachement d'un message dans un espace (sans authentification pour les tests)
+     */
+    public function testTogglePinMessage(Request $request, $messageId)
+    {
+        $validated = $request->validate([
+            'pin' => 'required|boolean',
+        ]);
+
+        try {
+            // Récupérer le message
+            $message = SpaceMessage::findOrFail($messageId);
+            $space = Space::findOrFail($message->space_id);
+            
+            // Mettre à jour le statut d'épinglage
+            if ($validated['pin']) {
+                // Si on épingle ce message, détacher tous les autres messages épinglés dans cet espace
+                SpaceMessage::where('space_id', $space->id)
+                    ->where('id', '!=', $message->id)
+                    ->where('is_pinned', true)
+                    ->update(['is_pinned' => false]);
+            }
+            
+            // Mettre à jour le statut du message cible
+            $message->is_pinned = $validated['pin'];
+            $message->save();
+            
+            // Charger les relations nécessaires pour l'événement
+            $message->load('user');
+            
+            // Diffuser l'événement
+            $messageData = [
+                'message' => [
+                    'id' => $message->id,
+                    'content' => $message->content,
+                    'is_pinned' => $message->is_pinned,
+                    'created_at' => $message->created_at->toIso8601String(),
+                    'created_at_formatted' => $message->created_at->format('H:i'),
+                    'sender' => $message->user ? [
+                        'id' => $message->user->id,
+                        'name' => $message->user->name,
+                        'username' => $message->user->username ?? $message->user->name
+                    ] : null
+                ]
+            ];
+            
+            // Utiliser directement l'API de Pusher
+            $pusher = Broadcast::driver()->getPusher();
+            $pusher->trigger(
+                'test-space.' . $space->id,
+                'message.pinned_status_changed',
+                $messageData
+            );
+            
+            return response()->json([
+                'success' => true,
+                'message' => $validated['pin'] ? "Message épinglé avec succès" : "Message détaché avec succès",
+                'data' => $messageData['message']
+            ]);
+        } catch (\Illuminate\Database\Eloquent\ModelNotFoundException $e) {
+            return response()->json(['success' => false, 'error' => 'Message ou espace non trouvé'], 404);
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
