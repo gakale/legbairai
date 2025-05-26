@@ -6,6 +6,8 @@ use App\Http\Controllers\Api\V1\SpaceApiController;
 use App\Http\Controllers\Api\V1\UserSpaceInteractionApiController;
 use App\Http\Controllers\Api\V1\NotificationController; // Importer
 use App\Http\Controllers\Api\V1\AudioClipApiController; // Importer pour les clips audio
+use App\Http\Controllers\Api\V1\DonationApiController; // Importer
+use App\Http\Controllers\Api\V1\UserApiController;
 
 /*
 |--------------------------------------------------------------------------
@@ -80,6 +82,12 @@ Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
         Route::get('/', [NotificationController::class, 'index'])->name('index');
         Route::patch('/{notification}/read', [NotificationController::class, 'markAsRead'])->name('markAsRead'); // Utiliser PATCH pour mettre à jour une ressource
         Route::post('/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('markAllAsRead');
+    });
+
+
+    Route::prefix('v1/donations')->name('api.v1.donations.')->group(function () {
+        Route::post('/initialize', [DonationApiController::class, 'initialize'])->name('initialize');
+        // Plus tard: Route::post('/paystack/webhook', [PaystackWebhookController::class, 'handle'])->name('paystack.webhook');
     });
 });
 Route::get('/v1/users/{user}', [UserApiController::class, 'show'])->name('api.v1.users.show.public');
