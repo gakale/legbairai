@@ -1,10 +1,13 @@
 // resources/js/components/Layout.jsx
 import React, { useState, useEffect } from 'react';
-import { Link, Outlet } from 'react-router-dom';
+import { Link, Outlet, useNavigate } from 'react-router-dom';
 import Button from './common/Button';
+import { useAuth } from '../contexts/AuthContext';
 
 const Navbar = () => {
     const [scrolled, setScrolled] = useState(false);
+    const { isAuthenticated, currentUser, logout } = useAuth();
+    const navigate = useNavigate();
 
     useEffect(() => {
         const handleScroll = () => {
@@ -13,6 +16,11 @@ const Navbar = () => {
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
+
+    const handleLogout = async () => {
+        await logout();
+        navigate('/');
+    };
 
     return (
         <nav className={`fixed top-0 w-full z-[1000] transition-all duration-300 ease-in-out px-4 sm:px-8 py-4 ${scrolled ? 'bg-[rgba(15,15,26,0.95)] shadow-gb-strong' : 'bg-[rgba(15,15,26,0.8)]'}`} style={{ backdropFilter: 'blur(20px)' }}>
@@ -26,20 +34,27 @@ const Navbar = () => {
                 <div className="hidden md:flex gap-4 sm:gap-8 items-center">
                     <a href="/#features" className="text-gb-white relative font-medium hover:after:w-full after:content-[''] after:absolute after:bottom-[-5px] after:left-0 after:w-0 after:h-[2px] after:bg-gb-accent after:transition-all after:duration-300">Fonctionnalités</a>
                     <a href="/#creators" className="text-gb-white relative font-medium hover:after:w-full after:content-[''] after:absolute after:bottom-[-5px] after:left-0 after:w-0 after:h-[2px] after:bg-gb-accent after:transition-all after:duration-300">Créateurs</a>
-                    <Button 
-                        to="/login" 
-                        variant="secondary" 
-                        className="py-2 px-6 text-sm"
-                    >
-                        Se connecter
-                    </Button>
-                    <Button 
-                        to="/register" 
-                        variant="primary" 
-                        className="py-2 px-6 text-sm"
-                    >
-                        Commencer
-                    </Button>
+                    {isAuthenticated ? (
+                        <>
+                            {currentUser && (
+                                <Link to={`/profile/${currentUser.id}`} className="text-gb-white font-medium hover:text-gb-primary-light">
+                                    {currentUser.username}
+                                </Link>
+                            )}
+                            <Button onClick={handleLogout} variant="secondary" className="py-2 px-6 text-sm">
+                                Déconnexion
+                            </Button>
+                        </>
+                    ) : (
+                        <>
+                            <Button to="/login" variant="secondary" className="py-2 px-6 text-sm">
+                                Se connecter
+                            </Button>
+                            <Button to="/register" variant="primary" className="py-2 px-6 text-sm">
+                                Commencer
+                            </Button>
+                        </>
+                    )}
                 </div>
                 <div className="md:hidden">
                     <button className="text-gb-white text-2xl">☰</button>
