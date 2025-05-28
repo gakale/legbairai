@@ -33,7 +33,7 @@ class UserApiController extends Controller
         return new ApiUserResource($user);
     }
 
-    public function follow(Request $request, User $userToFollow, FollowUserAction $followUserAction): JsonResponse
+    public function follow(Request $request, User $user, FollowUserAction $followUserAction)
     {
         /** @var User $follower */
         $follower = Auth::user();
@@ -44,7 +44,7 @@ class UserApiController extends Controller
         return response()->json(['message' => "Vous suivez maintenant {$userToFollow->username}."], 201);
     }
 
-    public function unfollow(Request $request, User $userToUnfollow, UnfollowUserAction $unfollowUserAction): JsonResponse|Response
+    public function unfollow(Request $request, User $user, UnfollowUserAction $unfollowUserAction)
     {
         /** @var User $follower */
         $follower = Auth::user();

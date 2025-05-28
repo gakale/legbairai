@@ -4,92 +4,72 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\SpaceApiController;
 use App\Http\Controllers\Api\V1\UserSpaceInteractionApiController;
-use App\Http\Controllers\Api\V1\NotificationController; // Importer
-use App\Http\Controllers\Api\V1\AudioClipApiController; // Importer pour les clips audio
-use App\Http\Controllers\Api\V1\DonationApiController; // Importer
-use App\Http\Controllers\Api\V1\UserApiController;
-use App\Http\Controllers\Webhook\PaystackWebhookController; // Importer
+use App\Http\Controllers\Api\V1\NotificationController;
+use App\Http\Controllers\Api\V1\AudioClipApiController;
+use App\Http\Controllers\Api\V1\DonationApiController;
+use App\Http\Controllers\Api\V1\UserApiController; // Assurez-vous que le namespace complet est utilisé si AuthController est dans le même dossier
+use App\Http\Controllers\Api\V1\AuthController; // Explicitement pour login/register/logout
+use App\Http\Controllers\Webhook\PaystackWebhookController;
 
-/*
-|--------------------------------------------------------------------------
-| API Routes
-|--------------------------------------------------------------------------
-|
-| Here is where you can register API routes for your application. These
-| routes are loaded by the RouteServiceProvider and all of them will
-| be assigned to the "api" middleware group. Make something great!
-|
-*/
 
 // Routes publiques (sans authentification)
-Route::group(['prefix' => 'v1', 'middleware' => ['api']], function () {
-    Route::post('/login', [App\Http\Controllers\Api\V1\AuthController::class, 'login'])->name('api.login');
-    Route::post('/register', [App\Http\Controllers\Api\V1\AuthController::class, 'register'])->name('api.register');
+// Le groupe 'api' est appliqué automatiquement aux fichiers dans routes/api.php par RouteServiceProvider
+Route::prefix('v1')->group(function () { // Le middleware 'api' est déjà appliqué
+    Route::post('/login', [AuthController::class, 'login'])->name('api.v1.login'); // Nom de route corrigé
+    Route::post('/register', [AuthController::class, 'register'])->name('api.v1.register'); // Nom de route corrigé
     
-    // Route pour obtenir le cookie CSRF (nécessaire pour les requêtes SPA)
-    Route::get('/csrf-cookie', function() {
-        return response()->json(['message' => 'CSRF cookie set']);
-    });
-    
-    // Routes spéciales pour les tests (sans authentification)
-    Route::get('/test/spaces', [SpaceApiController::class, 'index'])->name('api.test.spaces.index');
-    Route::post('/test/spaces/{space}/clips', [AudioClipApiController::class, 'testCreateClip'])->name('api.test.spaces.clips.store');
+    // Cette route n'est plus nécessaire avec Sanctum si EnsureFrontendRequestsAreStateful est utilisé
+    // Route::get('/csrf-cookie', function() {
+    //     return response()->json(['message' => 'CSRF cookie set']);
+    // });
 });
 Route::post('/v1/webhooks/paystack', [PaystackWebhookController::class, 'handle'])->name('webhooks.paystack');
 
-Route::middleware(['api', 'auth:sanctum'])->prefix('v1')->group(function () {
+Route::middleware('auth:sanctum')->prefix('v1')->name('api.v1.')->group(function () { // Ajout du name() ici pour préfixer tous les noms de route enfants
     Route::get('/user', function (Request $request) {
-        return new \App\Http\Resources\UserResource($request->user()->loadCount(['hostedSpaces', /* autres relations si besoin */]));
-    })->name('api.user.me');
-    Route::post('/logout', [App\Http\Controllers\Api\V1\AuthController::class, 'logout'])->name('api.logout');
+        return new \App\Http\Resources\UserResource($request->user()->loadCount(['hostedSpaces']));
+    })->name('user.me');
+    Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
 
     // --- Routes pour les Spaces ---
-    Route::prefix('spaces')->name('api.v1.spaces.')->group(function () {
-        Route::get('/', [SpaceApiController::class, 'index'])->name('index'); // Lister les Spaces
-        Route::post('/', [SpaceApiController::class, 'store'])->name('store'); // Créer un Space
-        Route::get('/{space}', [SpaceApiController::class, 'show'])->name('show'); // Détails d'un Space
-        Route::put('/{space}', [SpaceApiController::class, 'update'])->name('update'); // Mettre à jour un Space
-        Route::delete('/{space}', [SpaceApiController::class, 'destroy'])->name('destroy'); // Supprimer un Space
-
-        // Actions spécifiques sur un Space (par l'hôte/co-hôte)
+    Route::prefix('spaces')->name('spaces.')->group(function () { // Les noms seront api.v1.spaces.index etc.
+        Route::get('/', [SpaceApiController::class, 'index'])->name('index');
+        Route::post('/', [SpaceApiController::class, 'store'])->name('store');
+        Route::get('/{space}', [SpaceApiController::class, 'show'])->name('show');
+        Route::put('/{space}', [SpaceApiController::class, 'update'])->name('update');
+        Route::delete('/{space}', [SpaceApiController::class, 'destroy'])->name('destroy');
         Route::post('/{space}/start', [SpaceApiController::class, 'start'])->name('start');
         Route::post('/{space}/end', [SpaceApiController::class, 'end'])->name('end');
-
-        // Interactions des utilisateurs avec un Space
         Route::post('/{space}/join', [UserSpaceInteractionApiController::class, 'join'])->name('join');
         Route::post('/{space}/leave', [UserSpaceInteractionApiController::class, 'leave'])->name('leave');
         Route::post('/{space}/raise-hand', [UserSpaceInteractionApiController::class, 'raiseHand'])->name('raiseHand');
-
-        // Actions de modération par l'hôte/co-hôte sur les participants
         Route::post('/{space}/participants/{participantUser}/mute', [UserSpaceInteractionApiController::class, 'muteParticipant'])->name('participants.mute');
         Route::post('/{space}/participants/{participantUser}/unmute', [UserSpaceInteractionApiController::class, 'unmuteParticipant'])->name('participants.unmute');
-
-        // Envoi de messages dans un Space
-        Route::post('/{space}/message', [UserSpaceInteractionApiController::class, 'sendMessage'])->name('message');
-
+        Route::post('/{space}/participants/{participantUser}/role', [UserSpaceInteractionApiController::class, 'changeRole'])->name('participants.role'); // Ajout de cette route
+        Route::post('/{space}/messages', [UserSpaceInteractionApiController::class, 'sendMessage'])->name('messages.store'); // Corrigé le nom de la méthode et de la route
         Route::post('/messages/{spaceMessage}/toggle-pin', [UserSpaceInteractionApiController::class, 'togglePinMessage'])->name('messages.togglePin');
-        
-        // Routes pour les Clips Audio (création liée à un Space)
         Route::post('/{space}/clips', [AudioClipApiController::class, 'store'])->name('clips.store');
     });
 
     // --- Routes pour les Utilisateurs (Profils, Suivi) ---
-    Route::prefix('v1/users')->name('api.v1.users.')->group(function () {
-        Route::post('/{user}/follow', [App\Http\Controllers\Api\V1\UserApiController::class, 'follow'])->name('follow');
-        Route::delete('/{user}/unfollow', [App\Http\Controllers\Api\V1\UserApiController::class, 'unfollow'])->name('unfollow');
+    Route::prefix('users')->name('users.')->group(function () {
+        Route::post('/{user}/follow', [UserApiController::class, 'follow'])->name('follow');
+        Route::delete('/{user}/unfollow', [UserApiController::class, 'unfollow'])->name('unfollow'); // Ou POST si vous avez gardé POST
     });
 
     // --- Routes pour les Notifications ---
-    Route::prefix('v1/notifications')->name('api.v1.notifications.')->group(function () {
+    Route::prefix('notifications')->name('notifications.')->group(function () {
         Route::get('/', [NotificationController::class, 'index'])->name('index');
-        Route::patch('/{notification}/read', [NotificationController::class, 'markAsRead'])->name('markAsRead'); // Utiliser PATCH pour mettre à jour une ressource
+        Route::patch('/{notification}/read', [NotificationController::class, 'markAsRead'])->name('markAsRead');
         Route::post('/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('markAllAsRead');
     });
 
-
-    Route::prefix('v1/donations')->name('api.v1.donations.')->group(function () {
+    // --- Routes pour les Dons ---
+    Route::prefix('donations')->name('donations.')->group(function () {
         Route::post('/initialize', [DonationApiController::class, 'initialize'])->name('initialize');
-        // Plus tard: Route::post('/paystack/webhook', [PaystackWebhookController::class, 'handle'])->name('paystack.webhook');
     });
 });
+
+// Route publique pour voir les profils (en dehors du middleware auth:sanctum)
+// Assurez-vous que le préfixe est cohérent.
 Route::get('/v1/users/{user}', [UserApiController::class, 'show'])->name('api.v1.users.show.public');
