@@ -73,3 +73,5 @@ Route::middleware('auth:sanctum')->prefix('v1')->name('api.v1.')->group(function
 // Route publique pour voir les profils (en dehors du middleware auth:sanctum)
 // Assurez-vous que le préfixe est cohérent.
 Route::get('/v1/users/{user}', [UserApiController::class, 'show'])->name('api.v1.users.show.public');
+
+Route::get('/v1/spaces', [SpaceApiController::class, 'index'])->withoutMiddleware(['auth:sanctum'])->name('spaces.index.public');

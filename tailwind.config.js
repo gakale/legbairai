@@ -8,4 +8,8 @@ export default {
   ],
   // Dans Tailwind v4, la plupart de la configuration se fait dans le CSS avec @theme
   // Le fichier config peut être minimal
+
+  plugins: [
+    require('@tailwindcss/line-clamp'),
+  ],
 }

@@ -23,7 +23,7 @@ return new class extends Migration
     {
         Schema::create($this->spacesTable, function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('host_user_id')->constrained($this->usersTable)->cascadeOnDelete();
+            $table->foreignUuid('host_user_id')->comment('Référence vers l\'hôte du space');
             $table->string('title');
             $table->text('description')->nullable();
             $table->string('cover_image_url')->nullable();
