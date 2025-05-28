@@ -1,3 +1,17 @@
+// resources/js/pages/HomePage.jsx
 import React from 'react';
-const HomePage = () => <div className="container mx-auto py-10 px-4"><h2 className="text-3xl font-bold">Page d'Accueil (Contenu à venir)</h2><p>Nous allons recréer votre magnifique design ici.</p></div>;
+import HeroSection from './HomePageSections/HeroSection'; // Importer
+
+const HomePage = () => {
+    console.log("[HomePage.jsx] - Le composant HomePage est en cours de rendu.");
+    return (
+        <>
+            <HeroSection />
+            {/* Vous ajouterez les autres sections (Features, CTA) ici plus tard */}
+            {/* <FeaturesSection /> */}
+            {/* <CtaSection /> */}
+        </>
+    );
+};
+
 export default HomePage;
