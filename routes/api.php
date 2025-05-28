@@ -54,7 +54,7 @@ Route::middleware('auth:sanctum')->prefix('v1')->name('api.v1.')->group(function
     // --- Routes pour les Utilisateurs (Profils, Suivi) ---
     Route::prefix('users')->name('users.')->group(function () {
         Route::post('/{user}/follow', [UserApiController::class, 'follow'])->name('follow');
-        Route::delete('/{user}/unfollow', [UserApiController::class, 'unfollow'])->name('unfollow'); // Ou POST si vous avez gardé POST
+        Route::delete('/{user}/unfollow', [UserApiController::class, 'unfollow'])->name('unfollow');
     });
 
     // --- Routes pour les Notifications ---

@@ -35,24 +35,32 @@ class UserApiController extends Controller
 
     public function follow(Request $request, User $user, FollowUserAction $followUserAction)
     {
-        /** @var User $follower */
-        $follower = Auth::user();
-
-        // L'action lèvera une exception si on essaie de se suivre soi-même ou si on suit déjà.
-        $followUserAction->execute($follower, $userToFollow);
-
-        return response()->json(['message' => "Vous suivez maintenant {$userToFollow->username}."], 201);
+        \Log::debug('Tentative de follow', [
+            'follower' => $request->user()->id,
+            'user_to_follow' => $user->id ?? null,
+            'user_exists' => $user->exists
+        ]);
+        
+        abort_unless($user->exists, 404, 'Utilisateur non trouvé');
+        
+        try {
+            $follow = $followUserAction->execute($request->user(), $user);
+            return response()->json(['message' => 'Follow réussi', 'data' => $follow]);
+        } catch (\Exception $e) {
+            \Log::error('Erreur follow', ['error' => $e->getMessage()]);
+            return response()->json(['message' => $e->getMessage()], 400);
+        }
     }
 
     public function unfollow(Request $request, User $user, UnfollowUserAction $unfollowUserAction)
     {
-        /** @var User $follower */
-        $follower = Auth::user();
-
-        if ($unfollowUserAction->execute($follower, $userToUnfollow)) {
-            return response()->json(['message' => "Vous ne suivez plus {$userToUnfollow->username}."]);
+        abort_unless($user->exists, 404, 'Utilisateur non trouvé');
+        
+        try {
+            $unfollowUserAction->execute($request->user(), $user);
+            return response()->json(['message' => 'Vous ne suivez plus cet utilisateur']);
+        } catch (\Exception $e) {
+            return response()->json(['message' => $e->getMessage()], 400);
         }
-        // Si on arrive ici, c'est que l'utilisateur ne suivait pas déjà cette personne (ou s'est désuivi lui-même).
-        return response()->noContent(); // Ou un message d'erreur/info si vous préférez
     }
 }

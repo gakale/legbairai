@@ -3,6 +3,10 @@ import axios from 'axios';
 
 const API_URL = '/api/v1/users';
 
+const getToken = () => {
+  return localStorage.getItem('auth_token');
+};
+
 const getUserProfile = (userId) => {
     // L'endpoint public pour le profil ne nécessite pas d'authentification
     // mais l'API peut retourner des infos supplémentaires si l'utilisateur EST authentifié (ex: is_followed_by_current_user)
@@ -16,8 +20,12 @@ const followUser = (userId) => {
 };
 
 const unfollowUser = (userId) => {
-    // Nécessite d'être authentifié
-    return axios.post(`${API_URL}/${userId}/unfollow`); // Ou axios.delete si vous avez utilisé DELETE
+  return axios.delete(`/api/v1/users/${userId}/unfollow`, {
+    headers: { 
+      'Authorization': `Bearer ${getToken()}`,
+      'Content-Type': 'application/json'
+    }
+  });
 };
 
 const UserService = {

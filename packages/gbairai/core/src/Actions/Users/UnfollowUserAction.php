@@ -16,25 +16,18 @@ class UnfollowUserAction
     public function execute(UserContract $follower, UserContract $userToUnfollow): bool
     {
         if ($follower->getId() === $userToUnfollow->getId()) {
-            // On ne peut pas se "désuivre" soi-même, mais la relation n'existerait pas.
-            return false;
+            throw new \RuntimeException('Vous ne pouvez pas vous désuivre vous-même.');
         }
 
-        $followInstance = app(config('gbairai-core.models.follow'))
-            ::where('follower_user_id', $follower->getId())
-            ->where('following_user_id', $userToUnfollow->getId())
-            ->first();
+        $follow = Follow::where([
+            'follower_user_id' => $follower->getId(),
+            'following_user_id' => $userToUnfollow->getId()
+        ])->first();
 
-        if (!$followInstance) {
-            // L'utilisateur ne suivait pas déjà cette personne.
-            // On pourrait lever une exception ou simplement retourner false/true.
-            return false; // Ou true si on considère que l'état désiré est atteint.
+        if (!$follow) {
+            throw new \RuntimeException('Vous ne suivez pas cet utilisateur.');
         }
 
-        $deleted = $followInstance->delete();
-
-        // event(new UserStoppedFollowing($follower, $userToUnfollow));
-
-        return (bool) $deleted;
+        return $follow->delete();
     }
 }
