@@ -10,7 +10,7 @@
 
         <!-- Styles et Scripts Vite -->
         @viteReactRefresh
-        @vite(['resources/css/app.css', 'resources/js/app.jsx'])
+        @vite(['resources/css/app.css', 'resources/js/main.jsx'])
     </head>
     <body class="font-sans antialiased">
         <div id="app">
