@@ -23,13 +23,30 @@ Route::prefix('v1')->group(function () { // Le middleware 'api' est déjà appli
     //     return response()->json(['message' => 'CSRF cookie set']);
     // });
 });
-Route::post('/v1/webhooks/paystack', [PaystackWebhookController::class, 'handle'])->name('webhooks.paystack');
 
 Route::middleware('auth:sanctum')->prefix('v1')->name('api.v1.')->group(function () { // Ajout du name() ici pour préfixer tous les noms de route enfants
     Route::get('/user', function (Request $request) {
         return new \App\Http\Resources\UserResource($request->user()->loadCount(['hostedSpaces']));
     })->name('user.me');
     Route::post('/logout', [AuthController::class, 'logout'])->name('logout');
+
+    // --- Routes pour les Utilisateurs (Profils, Suivi) ---
+    Route::prefix('users')->name('users.')->group(function () {
+        Route::post('/{user}/follow', [UserApiController::class, 'follow'])->name('follow');
+        Route::delete('/{user}/unfollow', [UserApiController::class, 'unfollow'])->name('unfollow');
+    });
+
+    // --- Routes pour les Notifications ---
+    Route::prefix('notifications')->name('notifications.')->group(function () {
+        Route::get('/', [NotificationController::class, 'index'])->name('index');
+        Route::patch('/{notification}/read', [NotificationController::class, 'markAsRead'])->name('markAsRead');
+        Route::post('/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('markAllAsRead');
+    });
+
+    // --- Routes pour les Dons ---
+    Route::prefix('donations')->name('donations.')->group(function () {
+        Route::post('/initialize', [DonationApiController::class, 'initialize'])->name('initialize');
+    });
 
     // --- Routes pour les Spaces ---
     Route::prefix('spaces')->name('spaces.')->group(function () { // Les noms seront api.v1.spaces.index etc.
@@ -50,24 +67,6 @@ Route::middleware('auth:sanctum')->prefix('v1')->name('api.v1.')->group(function
         Route::post('/messages/{spaceMessage}/toggle-pin', [UserSpaceInteractionApiController::class, 'togglePinMessage'])->name('messages.togglePin');
         Route::post('/{space}/clips', [AudioClipApiController::class, 'store'])->name('clips.store');
     });
-
-    // --- Routes pour les Utilisateurs (Profils, Suivi) ---
-    Route::prefix('users')->name('users.')->group(function () {
-        Route::post('/{user}/follow', [UserApiController::class, 'follow'])->name('follow');
-        Route::delete('/{user}/unfollow', [UserApiController::class, 'unfollow'])->name('unfollow');
-    });
-
-    // --- Routes pour les Notifications ---
-    Route::prefix('notifications')->name('notifications.')->group(function () {
-        Route::get('/', [NotificationController::class, 'index'])->name('index');
-        Route::patch('/{notification}/read', [NotificationController::class, 'markAsRead'])->name('markAsRead');
-        Route::post('/mark-all-as-read', [NotificationController::class, 'markAllAsRead'])->name('markAllAsRead');
-    });
-
-    // --- Routes pour les Dons ---
-    Route::prefix('donations')->name('donations.')->group(function () {
-        Route::post('/initialize', [DonationApiController::class, 'initialize'])->name('initialize');
-    });
 });
 
 // Route publique pour voir les profils (en dehors du middleware auth:sanctum)
@@ -75,3 +74,5 @@ Route::middleware('auth:sanctum')->prefix('v1')->name('api.v1.')->group(function
 Route::get('/v1/users/{user}', [UserApiController::class, 'show'])->name('api.v1.users.show.public');
 
 Route::get('/v1/spaces', [SpaceApiController::class, 'index'])->withoutMiddleware(['auth:sanctum'])->name('spaces.index.public');
+
+Route::post('/v1/webhooks/paystack', [PaystackWebhookController::class, 'handle'])->name('webhooks.paystack');
