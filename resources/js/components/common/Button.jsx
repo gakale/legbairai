@@ -1,77 +1,92 @@
+// resources/js/components/common/Button.jsx
 import React from 'react';
+import { Link } from 'react-router-dom';
 
 /**
- * Composant bouton réutilisable
- * 
- * @param {Object} props - Les propriétés du composant
- * @param {string} props.variant - La variante du bouton (primary, secondary, danger)
- * @param {string} props.size - La taille du bouton (sm, md, lg)
- * @param {boolean} props.isLoading - Indique si le bouton est en état de chargement
- * @param {boolean} props.disabled - Indique si le bouton est désactivé
- * @param {Function} props.onClick - Fonction à exécuter au clic
- * @param {React.ReactNode} props.children - Contenu du bouton
+ * Composant Bouton réutilisable.
+ *
+ * @param {object} props
+ * @param {React.ReactNode} props.children - Le contenu du bouton (texte, icône, etc.).
+ * @param {'primary' | 'secondary' | 'custom'} [props.variant='primary'] - La variante de style du bouton.
+ * @param {'button' | 'submit' | 'reset'} [props.type='button'] - Le type HTML du bouton (si `as="button"`).
+ * @param {string} [props.to] - Si fourni, le bouton agira comme un lien React Router.
+ * @param {string} [props.href] - Si fourni (et `to` n'est pas fourni), le bouton agira comme un lien `<a>` standard.
+ * @param {() => void} [props.onClick] - Fonction à appeler lors du clic.
+ * @param {string} [props.className] - Classes Tailwind supplémentaires à appliquer.
+ * @param {boolean} [props.disabled=false] - Désactive le bouton.
+ * @param {React.ElementType} [props.as='button'] - L'élément HTML à rendre (button, a, Link).
+ * @param {React.ReactNode} [props.iconLeft] - Icône à afficher à gauche du texte.
+ * @param {React.ReactNode} [props.iconRight] - Icône à afficher à droite du texte.
  */
-const Button = ({ 
-  variant = 'primary', 
-  size = 'md', 
-  isLoading = false, 
-  disabled = false, 
-  onClick, 
-  children,
-  className = '',
-  ...props 
+const Button = ({
+    children,
+    variant = 'primary',
+    type = 'button',
+    to,
+    href,
+    onClick,
+    className = '',
+    disabled = false,
+    as: Component = 'button', // Par défaut, c'est un <button>
+    iconLeft,
+    iconRight,
+    ...rest // Pour passer d'autres props HTML natives (ex: aria-label)
 }) => {
-  // Classes de base
-  const baseClasses = 'inline-flex items-center justify-center rounded-md font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2';
-  
-  // Classes de variante
-  const variantClasses = {
-    primary: 'bg-blue-600 text-white hover:bg-blue-700 focus:ring-blue-500',
-    secondary: 'bg-gray-200 text-gray-900 hover:bg-gray-300 focus:ring-gray-500',
-    danger: 'bg-red-600 text-white hover:bg-red-700 focus:ring-red-500',
-    success: 'bg-green-600 text-white hover:bg-green-700 focus:ring-green-500',
-    outline: 'bg-transparent border border-gray-300 text-gray-700 hover:bg-gray-50 focus:ring-gray-500',
-  };
-  
-  // Classes de taille
-  const sizeClasses = {
-    sm: 'text-sm px-3 py-1.5',
-    md: 'text-base px-4 py-2',
-    lg: 'text-lg px-6 py-3',
-  };
-  
-  // Classes d'état
-  const stateClasses = [
-    disabled || isLoading ? 'opacity-70 cursor-not-allowed' : 'cursor-pointer',
-  ];
-  
-  // Combinaison des classes
-  const buttonClasses = [
-    baseClasses,
-    variantClasses[variant],
-    sizeClasses[size],
-    ...stateClasses,
-    className
-  ].join(' ');
-  
-  return (
-    <button
-      className={buttonClasses}
-      disabled={disabled || isLoading}
-      onClick={onClick}
-      {...props}
-    >
-      {isLoading ? (
-        <span className="mr-2">
-          <svg className="animate-spin h-4 w-4 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-        </span>
-      ) : null}
-      {children}
-    </button>
-  );
+    const baseClasses = "py-[0.7rem] px-[1.5rem] rounded-button font-semibold cursor-pointer transition-all duration-300 no-underline inline-flex items-center justify-center relative overflow-hidden text-center disabled:opacity-50 disabled:cursor-not-allowed";
+
+    let variantClasses = '';
+    switch (variant) {
+        case 'primary':
+            variantClasses = "bg-gb-gradient-1 text-gb-white shadow-gb-light hover:translate-y-[-2px] hover:shadow-gb-medium focus:ring-2 focus:ring-gb-primary-light focus:ring-opacity-50";
+            break;
+        case 'secondary':
+            variantClasses = "bg-transparent text-gb-white border-2 border-gb-primary-light hover:bg-gb-primary-light hover:text-gb-dark hover:translate-y-[-2px] focus:ring-2 focus:ring-gb-primary-light focus:ring-opacity-50";
+            break;
+        case 'custom': // Pour les cas où on veut juste les classes de base + des classes custom
+            variantClasses = "";
+            break;
+        default:
+            variantClasses = "bg-gb-gradient-1 text-gb-white shadow-gb-light hover:translate-y-[-2px] hover:shadow-gb-medium";
+    }
+
+    const combinedClasses = `${baseClasses} ${variantClasses} ${className}`;
+
+    const content = (
+        <>
+            {iconLeft && <span className="mr-2">{iconLeft}</span>}
+            {children}
+            {iconRight && <span className="ml-2">{iconRight}</span>}
+        </>
+    );
+
+    if (to) { // Si 'to' est fourni, utiliser React Router Link
+        return (
+            <Link to={to} className={combinedClasses} {...rest}>
+                {content}
+            </Link>
+        );
+    }
+
+    if (href) { // Si 'href' est fourni, utiliser une balise <a>
+        return (
+            <a href={href} className={combinedClasses} onClick={onClick} {...rest}>
+                {content}
+            </a>
+        );
+    }
+
+    // Par défaut, ou si as="button"
+    return (
+        <button
+            type={Component === 'button' ? type : undefined} // type seulement pertinent pour <button>
+            className={combinedClasses}
+            onClick={onClick}
+            disabled={disabled}
+            {...rest}
+        >
+            {content}
+        </button>
+    );
 };
 
 export default Button;

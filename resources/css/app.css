@@ -33,31 +33,6 @@
 }
 
 @layer components {
-    .btn {
-        @apply py-3 px-6 rounded-full font-semibold cursor-pointer transition-all duration-300 no-underline inline-block relative overflow-hidden;
-    }
-    
-    .btn-primary {
-        background: var(--gradient-gb-1);
-        @apply text-white;
-        box-shadow: var(--shadow-gb-light);
-    }
-    
-    .btn-primary:hover {
-        transform: translateY(-2px);
-        box-shadow: var(--shadow-gb-medium);
-    }
-    
-    .btn-secondary {
-        @apply bg-transparent text-white border-2;
-        border-color: var(--color-gb-primary-light);
-    }
-    
-    .btn-secondary:hover {
-        background-color: var(--color-gb-primary-light);
-        color: var(--color-gb-dark);
-        transform: translateY(-2px);
-    }
     
     /* Classes utilitaires pour les gradients */
     .bg-gb-gradient-1 {

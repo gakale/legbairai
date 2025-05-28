@@ -1,6 +1,6 @@
 // resources/js/pages/HomePageSections/HeroSection.jsx
 import React from 'react';
-import { Link } from 'react-router-dom'; // Si les boutons sont des liens internes
+import Button from '../../components/common/Button'; // Import the Button component
 
 // Vous pouvez créer des composants plus petits pour le PhoneMockup, Stats, etc.
 // Pour l'instant, on intègre tout ici pour commencer.
@@ -78,8 +78,8 @@ const HeroSection = () => {
                         Créez, partagez et monétisez vos conversations audio en temps réel. Rejoignez des milliers de créateurs qui réinventent l'interaction sociale.
                     </p>
                     <div className="flex flex-col sm:flex-row gap-4 mb-12 justify-center md:justify-start">
-                        <Link to="/register" className="btn btn-primary text-base sm:text-lg">Créer mon Space</Link>
-                        <Link to="/explore" className="btn btn-secondary text-base sm:text-lg">Explorer les Spaces</Link>
+                        <Button to="/register" variant="primary" className="text-base sm:text-lg">Créer mon Space</Button>
+                        <Button to="/explore" variant="secondary" className="text-base sm:text-lg">Explorer les Spaces</Button>
                     </div>
                     <div className="flex gap-8 sm:gap-12 justify-center md:justify-start">
                         <div className="text-center">
