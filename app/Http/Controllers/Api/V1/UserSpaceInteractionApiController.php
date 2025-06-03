@@ -120,4 +120,35 @@ class UserSpaceInteractionApiController extends Controller
         // L'événement est déjà déclenché par l'action.
         return response()->json(new SpaceMessageResource($updatedMessage));
     }
+
+    /**
+     * Récupérer les messages d'un espace
+     */
+    public function getMessages(Request $request, Space $space): JsonResponse
+    {
+        // Vérifier si l'utilisateur peut voir cet espace
+        $this->authorize('view', $space);
+        
+        $validatedData = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $page = $validatedData['page'] ?? 1;
+        $perPage = $validatedData['per_page'] ?? 50;
+
+        // Récupérer les messages de l'espace avec pagination
+        $messages = $space->messages()
+            ->with('user') // Charger la relation utilisateur
+            ->orderBy('created_at', 'desc') // Du plus récent au plus ancien
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        // Formater la réponse comme attendue par le frontend
+        // Le frontend s'attend à recevoir directement un tableau de messages
+        // et non une structure avec data et meta
+        return response()->json([
+            'data' => SpaceMessageResource::collection($messages->items()),
+            // Pas de métadonnées de pagination pour correspondre à ce qu'attend le frontend
+        ]);
+    }
 }

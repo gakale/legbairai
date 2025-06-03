@@ -8,8 +8,19 @@ use Illuminate\Support\Facades\Log;
 use App\Events\SpaceStartedEvent;
 use Gbairai\Core\Models\Space;
 use App\Http\Controllers\RealtimeTestController;
+use Illuminate\Support\Facades\Broadcast;
 
 
+
+// Routes de broadcasting pour l'authentification WebSocket
+// Utiliser web pour les cookies et désactiver temporairement l'authentification pour le débogage
+// En production, utilisez ['web', 'auth:sanctum']
+Broadcast::routes(['middleware' => ['web']]);  // Simplifier au maximum pour le débogage
+
+// Route de test pour vérifier l'authentification WebSocket
+Route::get('/test-auth', function() {
+    return ['authenticated' => auth()->check(), 'user' => auth()->user()];
+});
 
 Route::get('/{any?}', function () {
     return view('app'); // Ou 'welcome' si vous avez modifié welcome.blade.php
