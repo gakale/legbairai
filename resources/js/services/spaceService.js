@@ -66,12 +66,22 @@ export const fetchSpaces = async (page = 1, perPage = 15) => {
 // bien que certaines soient déjà dans UserSpaceInteractionApiController et pourraient
 // être dans un service dédié ou ici)
 
+const joinSpace = async (spaceId) => {
+  return axios.post(`${API_URL}/${spaceId}/join`, {}, {
+    headers: {
+      'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+      'Content-Type': 'application/json'
+    }
+  });
+};
+
 const SpaceService = {
   getSpacesFeed,
   getSpaces, // Maintenir temporairement
   getSpaceDetails,
   fetchSpaces,
   getSpaceMessages,
+  joinSpace,
 };
 
 export default SpaceService;
