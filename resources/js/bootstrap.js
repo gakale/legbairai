@@ -40,7 +40,8 @@ if (isUserAuthenticated()) {
         auth: {
             headers: {
                 Accept: 'application/json',
-                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content')
+                'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
+                'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
             }
         }
     });
