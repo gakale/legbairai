@@ -4,6 +4,8 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import SpaceService, { joinSpace } from '../services/SpaceService'; // Updated import
 import Button from '../components/common/Button';
+import Peer from 'simple-peer'; // WebRTC library
+
 // Importer les composants pour le chat, la liste des participants, etc. (nous les créerons/améliorerons)
 // import ParticipantList from '../components/spaces/ParticipantList';
 // import ChatWindow from '../components/spaces/ChatWindow';
@@ -29,16 +31,40 @@ const SpaceDetailPage = () => {
     const [newMessageContent, setNewMessageContent] = useState('');
     const [isJoining, setIsJoining] = useState(false); // New state for join button
 
+    // WebRTC State
+    const [localStream, setLocalStream] = useState(null);
+    const [peers, setPeers] = useState({});
+    const peersRef = useRef({});
+    const [remoteStreams, setRemoteStreams] = useState({});
+    const remoteStreamsRef = useRef({});
+    const [isMuted, setIsMuted] = useState(true); // Start muted by default
+
+
     // Références pour les callbacks Echo afin d'éviter des dépendances excessives dans useEffect
     const messagesRef = useRef(messages);
     const participantsRef = useRef(participants);
     const pinnedMessageRef = useRef(pinnedMessage);
+    // No need for localStreamRef if setLocalStream is used correctly in its own effects or callbacks
 
     useEffect(() => {
         messagesRef.current = messages;
+    }, [messages]);
+
+    useEffect(() => {
         participantsRef.current = participants;
+    }, [participants]);
+
+    useEffect(() => {
         pinnedMessageRef.current = pinnedMessage;
-    }, [messages, participants, pinnedMessage]);
+    }, [pinnedMessage]);
+
+    useEffect(() => {
+        peersRef.current = peers;
+    }, [peers]);
+
+    useEffect(() => {
+        remoteStreamsRef.current = remoteStreams;
+    }, [remoteStreams]);
 
 
     const fetchInitialData = useCallback(async () => {
@@ -193,14 +219,225 @@ const SpaceDetailPage = () => {
                 setParticipants(prev =>
                     prev.map(p => p.id === eventData.user_id ? { ...p, is_muted_by_host: eventData.is_muted_by_host } : p)
                 );
+            })
+            // New listener for our audio signals
+            .listen('.audio.signal', (eventData) => {
+                const { user_id: signalUserId, signal } = eventData;
+                // console.log('Received signal from Echo:', signalUserId, signal, 'Current peers:', peersRef.current);
+                const peer = peersRef.current[signalUserId];
+
+                if (signalUserId === currentUserId) {
+                    // console.log("Ignoring signal from self");
+                    return;
+                }
+
+                if (peer) {
+                    if (signal.renegotiate || signal.transceiverRequest) {
+                       // console.log('Ignoring renegotiate or transceiverRequest signal from simple-peer');
+                    } else if (peer.destroyed && (signal.type === 'offer' || signal.type === 'answer')) {
+                       // console.warn(`Received signal for already destroyed peer: ${signalUserId}. Attempting to recreate.`);
+                        // Potentially recreate the peer here if necessary. For now, just log.
+                    } else if (peer.destroyed) {
+                       // console.warn(`Received signal for already destroyed peer: ${signalUserId}. Ignoring.`);
+                    } else {
+                       // console.log(`Received signal from ${signalUserId}, processing with peer:`, signal);
+                        peer.signal(signal);
+                    }
+                } else {
+                   // console.warn(`Peer not found for user ID: ${signalUserId} when trying to process signal. Signal data:`, signal);
+                    // This can happen if a signal arrives before the peer object is created,
+                    // or if the user sending the signal is not yet in the local participant list,
+                    // or if the peer was destroyed but a late signal arrived.
+                    // If it's an offer, we might want to queue it or create a new peer.
+                    // For now, simple logging.
+                }
             });
 
 
         return () => {
-            window.Echo.leave(`space.${spaceId}`);
+            if (presenceChannel) { // Make sure presenceChannel is defined
+                window.Echo.leave(`space.${spaceId}`);
+            }
             setConnectionStatus('Déconnecté');
+            // Clean up WebRTC resources
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+            }
+            Object.values(peersRef.current).forEach(peer => peer.destroy());
+            setPeers({});
+            setLocalStream(null);
+            setRemoteStreams({});
         };
-    }, [spaceId, fetchInitialData, currentUserId, isAuthenticated]); // Ajout de isAuthenticated aux dépendances
+    }, [spaceId, fetchInitialData, currentUserId, isAuthenticated, localStream]); // Added localStream
+
+    // WebRTC: Start local audio stream
+    const startLocalAudio = useCallback(async () => {
+        if (localStream) return; // Already started
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            setLocalStream(stream);
+            setIsMuted(false); // Unmute when stream is acquired
+            return stream;
+        } catch (err) {
+            console.error("Erreur accès microphone:", err);
+            setError("Impossible d'accéder au microphone. Veuillez vérifier les permissions.");
+            setIsMuted(true); // Stay muted if error
+            return null;
+        }
+    }, [localStream]);
+
+    // WebRTC: Stop local audio stream
+    const stopLocalAudio = useCallback(() => {
+        if (localStream) {
+            localStream.getTracks().forEach(track => track.stop());
+            setLocalStream(null);
+            setIsMuted(true); // Mute when stream is stopped
+        }
+    }, [localStream]);
+
+    // WebRTC: Mute/Unmute toggle
+    const handleMuteToggle = useCallback(async () => {
+        if (isMuted) { // User wants to unmute
+            const stream = await startLocalAudio();
+            if (stream) {
+                setIsMuted(false);
+                // Add stream to existing peers
+                Object.values(peersRef.current).forEach(peer => {
+                    if (!peer.destroyed) {
+                        peer.addStream(stream);
+                    }
+                });
+            }
+        } else { // User wants to mute
+            stopLocalAudio(); // This also sets isMuted to true
+            // Remove stream from existing peers
+            Object.values(peersRef.current).forEach(peer => {
+                 if (!peer.destroyed && localStream) { // localStream check is technically redundant due to stopLocalAudio logic
+                    // peer.removeStream(localStream); // This was causing issues with simple-peer renegotiation
+                    // Instead, toggle track enabled status (more robust for temporary mute)
+                    // However, for full stop/start, removing and re-adding is needed.
+                    // Since stopLocalAudio stops tracks and nulls localStream, new peers won't get it.
+                    // Existing peers need to be handled.
+                    // For simplicity, if we stop the local stream, new peers won't have it.
+                    // Existing peers might need renegotiation or track replacement.
+                    // The simplest for now is to destroy peers if local stream is fully stopped,
+                    // or rely on adding/removing tracks if the stream object itself persists.
+                    // Given current start/stop logic, a full stop means peers can't send.
+                    // Let's ensure tracks are disabled.
+                 }
+            });
+             if (localStream) { // Ensure tracks are disabled if stream object still exists momentarily
+                localStream.getAudioTracks().forEach(track => track.enabled = false);
+             }
+             setIsMuted(true); // Explicitly set, though stopLocalAudio does it.
+        }
+    }, [isMuted, startLocalAudio, stopLocalAudio, localStream]);
+
+
+    // WebRTC: Manage Peer Connections based on participants and localStream
+    useEffect(() => {
+        if (!localStream || !isAuthenticated || !currentUserId || space?.status !== 'live') {
+            // If local stream isn't ready, not authenticated, or space not live, destroy existing peers.
+            Object.values(peersRef.current).forEach(peer => peer.destroy());
+            setPeers({});
+            setRemoteStreams({}); // Clear remote streams as well
+            return;
+        }
+
+        const currentPeers = peersRef.current;
+        const activeParticipantIds = new Set(participants.map(p => p.id));
+
+        // Create peers for new participants
+        participants.forEach(participant => {
+            if (participant.id === currentUserId || currentPeers[participant.id]) {
+                return; // Don't create peer for self or if already exists
+            }
+
+            console.log(`Creating peer for ${participant.id} (current user: ${currentUserId})`);
+            // Determine initiator: simpler to have one side always initiate, e.g., user with lower ID.
+            // This needs to be consistent for any pair of users.
+            const initiator = currentUserId < participant.id;
+            console.log(`Initiator status for peer with ${participant.id}: ${initiator}`);
+
+            const newPeer = new Peer({
+                initiator: initiator,
+                trickle: true,
+                stream: localStream, // Add local stream immediately
+            });
+
+            newPeer.on('signal', (data) => {
+                // console.log(`Sending signal to ${participant.id}:`, data);
+                SpaceService.sendAudioSignal(spaceId, data) // Pass signal data directly
+                    .catch(err => console.error("Erreur envoi signal:", err));
+            });
+
+            newPeer.on('stream', (remoteStream) => {
+                console.log('Stream reçu de:', participant.id, remoteStream);
+                setRemoteStreams(prev => ({ ...prev, [participant.id]: remoteStream }));
+                // Add a 'username' or other identifier to the stream object if needed for display
+                // remoteStream.username = participant.username;
+            });
+
+            newPeer.on('connect', () => {
+                console.log('CONNECTÉ avec peer:', participant.id);
+            });
+
+            newPeer.on('close', () => {
+                console.log('Peer déconnecté (close):', participant.id);
+                setRemoteStreams(prev => {
+                    const newState = { ...prev };
+                    delete newState[participant.id];
+                    return newState;
+                });
+                setPeers(prev => {
+                    const newState = { ...prev };
+                    delete newState[participant.id];
+                    return newState;
+                });
+            });
+
+            newPeer.on('error', (err) => {
+                console.error('Erreur Peer:', participant.id, err);
+                // Attempt to clean up this specific peer
+                if (currentPeers[participant.id]) {
+                    currentPeers[participant.id].destroy();
+                }
+                 setRemoteStreams(prev => {
+                    const newState = { ...prev };
+                    delete newState[participant.id];
+                    return newState;
+                });
+                setPeers(prev => {
+                    const newState = { ...prev };
+                    delete newState[participant.id];
+                    return newState;
+                });
+            });
+
+            setPeers(prev => ({ ...prev, [participant.id]: newPeer }));
+        });
+
+        // Remove peers for participants who left
+        Object.keys(currentPeers).forEach(peerId => {
+            // peerId is a string, participant.id is a number. Convert for comparison.
+            if (!activeParticipantIds.has(parseInt(peerId))) {
+                console.log(`Participant ${peerId} a quitté, destruction du peer.`);
+                currentPeers[peerId].destroy();
+                setRemoteStreams(prev => {
+                    const newState = { ...prev };
+                    delete newState[peerId];
+                    return newState;
+                });
+                setPeers(prev => {
+                    const newState = { ...prev };
+                    delete newState[peerId];
+                    return newState;
+                });
+            }
+        });
+
+    }, [participants, localStream, spaceId, currentUserId, isAuthenticated, space?.status]);
+
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
@@ -334,6 +571,27 @@ const canJoinSpace = isAuthenticated && currentUser && currentUser.id !== space?
                         )}
                     </div>
                 </div>
+
+                {/* Audio Elements for WebRTC */}
+                { Object.entries(remoteStreams).map(([peerId, stream]) => (
+                    <audio
+                        key={peerId}
+                        ref={audioEl => { if (audioEl) audioEl.srcObject = stream; }}
+                        autoPlay
+                        playsInline
+                        // controls // For debugging
+                        style={{ display: 'none' }} // Hide audio elements
+                    />
+                ))}
+
+                {/* Mute/Unmute Button */}
+                {isAuthenticated && space?.status === 'live' && (
+                     <div className="mt-4 text-center">
+                        <Button onClick={handleMuteToggle} variant={isMuted ? "secondary" : "danger"} className="px-6 py-3">
+                            {isMuted ? '🎙️ Activer Micro' : '🔇 Couper Micro'}
+                        </Button>
+                    </div>
+                )}
                  {/* TODO: Ajouter les contrôles du Space (Start/End, lever la main, dons, etc.) */}
             </div>
         </div>

@@ -19,6 +19,7 @@ use Illuminate\Support\Facades\Auth;
 use Gbairai\Core\Actions\Spaces\UpdateSpaceAction; // Importer
 use Illuminate\Http\Response; // Pour le code 204 No Content
 use Illuminate\Database\Eloquent\Builder;
+use App\Events\AudioStreamEvent; // Import the new event
 
 class SpaceApiController extends Controller
 {
@@ -195,5 +196,33 @@ class SpaceApiController extends Controller
         $deleteSpaceAction->execute(Auth::user(), $space);
 
         return response()->noContent(); // Code 204: Succès, pas de contenu à retourner
+    }
+
+    /**
+     * Handle audio signaling for WebRTC.
+     */
+    public function handleAudioSignal(Request $request, Space $space): JsonResponse
+    {
+        // Authorize that the user is a participant of the space
+        // You might have a more specific policy or check, e.g., 'participate'
+        // For simplicity, checking if the user is part of the space's participants
+        // This assumes 'participants' is a loaded relationship or can be queried.
+        // Adjust authorization as per your application's logic.
+        $this->authorize('view', $space); // Re-use 'view' or define a more granular policy like 'signalInSpace'
+
+        $user = Auth::user();
+        if (!$user) {
+            return response()->json(['message' => 'Unauthenticated.'], 401);
+        }
+
+        // Validate the incoming signal data
+        $validated = $request->validate([
+            'signalData' => 'required|array',
+        ]);
+
+        // Dispatch the event
+        broadcast(new AudioStreamEvent($space->id, $validated['signalData'], $user->id))->toOthers();
+
+        return response()->json(['message' => 'Signal processed']);
     }
 }
