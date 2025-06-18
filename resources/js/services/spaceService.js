@@ -5,11 +5,7 @@ const API_URL = '/api/v1/spaces';
 export const getSpacesFeed = async (page = 1, perPage = 15) => {
   try {
     const response = await axios.get('/api/v1/spaces', {
-      params: { page, per_page: perPage },
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
+      params: { page, per_page: perPage }
     });
     return response.data;
   } catch (error) {
@@ -22,22 +18,13 @@ export const getSpacesFeed = async (page = 1, perPage = 15) => {
 export const getSpaces = getSpacesFeed;
 
 export const getSpaceDetails = (spaceId) => {
-  return axios.get(`${API_URL}/${spaceId}`, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  return axios.get(`${API_URL}/${spaceId}`);
 };
 
 const getSpaceMessages = async (spaceId, page = 1, perPage = 50) => {
   try {
     const response = await axios.get(`/api/v1/spaces/${spaceId}/messages`, {
-      params: { page, per_page: perPage },
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        'Content-Type': 'application/json'
-      }
+      params: { page, per_page: perPage }
     });
     return response.data;
   } catch (error) {
@@ -49,10 +36,7 @@ const getSpaceMessages = async (spaceId, page = 1, perPage = 50) => {
 export const fetchSpaces = async (page = 1, perPage = 15) => {
   try {
     const response = await axios.get('/api/v1/spaces', {
-      params: { page, per_page: perPage },
-      headers: {
-        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
-      }
+      params: { page, per_page: perPage }
     });
     return response.data;
   } catch (error) {
@@ -63,21 +47,11 @@ export const fetchSpaces = async (page = 1, perPage = 15) => {
 
 // Fonctions ajoutées
 const sendAudioSignal = (spaceId, signalData) => {
-  return axios.post(`/api/v1/spaces/${spaceId}/audio-signal`, { signalData: signalData }, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  return axios.post(`/api/v1/spaces/${spaceId}/audio-signal`, { signalData: signalData });
 };
 
 export const joinSpace = async (spaceId) => {
-  return axios.post(`${API_URL}/${spaceId}/join`, {}, {
-    headers: {
-      'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-      'Content-Type': 'application/json'
-    }
-  });
+  return axios.post(`${API_URL}/${spaceId}/join`, {});
 };
 
 const SpaceService = {
