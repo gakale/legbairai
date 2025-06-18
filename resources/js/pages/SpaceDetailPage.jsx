@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import SpaceService from '../services/SpaceService';
+import SpaceService, { joinSpace } from '../services/SpaceService'; // Updated import
 import Button from '../components/common/Button';
 // Importer les composants pour le chat, la liste des participants, etc. (nous les créerons/améliorerons)
 // import ParticipantList from '../components/spaces/ParticipantList';
@@ -27,6 +27,7 @@ const SpaceDetailPage = () => {
     const [error, setError] = useState('');
     const [connectionStatus, setConnectionStatus] = useState('Déconnecté');
     const [newMessageContent, setNewMessageContent] = useState('');
+    const [isJoining, setIsJoining] = useState(false); // New state for join button
 
     // Références pour les callbacks Echo afin d'éviter des dépendances excessives dans useEffect
     const messagesRef = useRef(messages);
@@ -216,11 +217,29 @@ const SpaceDetailPage = () => {
         }
     };
 
+const handleJoinSpace = async () => {
+  setIsJoining(true);
+  setError(''); // Clear previous errors
+  try {
+    await SpaceService.joinSpace(spaceId);
+    // Le WebSocket event 'joining' devrait gérer l'update de la liste des participants.
+    // console.log("Successfully joined space");
+    // Optionnel: Afficher une notification de succès discrète si nécessaire.
+  } catch (err) {
+    console.error("Erreur pour rejoindre le Space:", err);
+    setError(err.response?.data?.message || "Impossible de rejoindre le Space.");
+  } finally {
+    setIsJoining(false);
+  }
+};
+
     if (isLoading) return <div className="text-center py-20 text-gb-light-gray">Chargement du Space...</div>;
-    if (error) return <div className="text-center py-20 text-red-400">{error}</div>;
+if (error && !isJoining) return <div className="text-center py-20 text-red-400">{error}</div>; // Ne pas afficher l'erreur de chargement si on tente de join
     if (!space) return <div className="text-center py-20 text-gb-light-gray">Space non trouvé.</div>;
 
     const isHost = isAuthenticated && currentUser && currentUser.id === space.host?.id;
+const isParticipant = participants.some(p => p.id === currentUser?.id);
+const canJoinSpace = isAuthenticated && currentUser && currentUser.id !== space?.host?.id && !isParticipant && space?.status !== 'ended';
 
     return (
         <div className="container mx-auto py-10 px-4 min-h-screen">
@@ -238,6 +257,21 @@ const SpaceDetailPage = () => {
                     </div>
                     {space.description && <p className="text-gb-gray mt-3">{space.description}</p>}
                 </div>
+
+                {/* Join Space Button */}
+                {canJoinSpace && (
+                    <div className="my-4"> {/* Adjusted margin to 'my-4' for spacing */}
+                        <Button
+                            onClick={handleJoinSpace}
+                            disabled={isJoining}
+                            variant="primary"
+                        >
+                            {isJoining ? 'Chargement...' : 'Rejoindre le Space'}
+                        </Button>
+                    </div>
+                )}
+                {error && isJoining && <p className="text-red-400 text-sm mt-2">{error}</p>} {/* Display error specific to joining */}
+
 
                 {/* Message épinglé */}
                 {pinnedMessage && (
