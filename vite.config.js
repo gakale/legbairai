@@ -12,4 +12,8 @@ export default defineConfig({
         tailwindcss(),
         react(), // Ajoute le support de React et JSX
     ],
+    define: {
+        // 'process.env': process.env, // Example if needed, ensure process is available or handle appropriately
+        global: 'window', // Fix for "global is not defined"
+    },
 });
