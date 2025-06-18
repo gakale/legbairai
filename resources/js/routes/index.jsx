@@ -4,6 +4,7 @@ import { useAuth } from '../contexts/AuthContext';
 
 // Pages
 import HomePage from '../pages/HomePage';
+import CreateSpacePage from '../pages/CreateSpacePage'; // Import the new page
 // Importez d'autres pages ici au fur et à mesure que vous les créez
 
 // Layout et composants communs
@@ -39,8 +40,7 @@ const AppRoutes = () => {
           path="/spaces/create" 
           element={
             <ProtectedRoute>
-              {/* <CreateSpacePage /> */}
-              <div>Page de création d'espace (à implémenter)</div>
+              <CreateSpacePage />
             </ProtectedRoute>
           } 
         />

@@ -38,6 +38,12 @@ const SpaceDetailPage = () => {
     const [remoteStreams, setRemoteStreams] = useState({});
     const remoteStreamsRef = useRef({});
     const [isMuted, setIsMuted] = useState(true); // Start muted by default
+    const [speakingParticipants, setSpeakingParticipants] = useState({}); // {[participantId]: boolean}
+
+    // Refs for Web Audio API parts
+    const audioContextRef = useRef(null); // Single AudioContext for all analysers
+    const remoteAnalysersRef = useRef({}); // Stores { [streamOwnerId]: { analyser, sourceNode, animationFrameId, dataArray } }
+                                        // streamOwnerId can be currentUserId for local stream
 
 
     // Références pour les callbacks Echo afin d'éviter des dépendances excessives dans useEffect
@@ -269,6 +275,125 @@ const SpaceDetailPage = () => {
             setRemoteStreams({});
         };
     }, [spaceId, fetchInitialData, currentUserId, isAuthenticated, localStream]); // Added localStream
+
+
+    // Unified Speaking Detection Logic for Local and Remote Streams
+    useEffect(() => {
+        const SPEAKING_THRESHOLD = 20; // Example threshold, might need tuning
+        const FFT_SIZE = 512;
+
+        const setupAnalyserForStream = (stream, streamOwnerId) => {
+            if (!audioContextRef.current) {
+                audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+            }
+            const audioContext = audioContextRef.current;
+
+            // Clean up existing analyser for this streamOwnerId if any
+            if (remoteAnalysersRef.current[streamOwnerId]) {
+                const existing = remoteAnalysersRef.current[streamOwnerId];
+                if (existing.animationFrameId) cancelAnimationFrame(existing.animationFrameId);
+                if (existing.sourceNode) existing.sourceNode.disconnect();
+            }
+
+            const analyser = audioContext.createAnalyser();
+            analyser.fftSize = FFT_SIZE;
+            const sourceNode = audioContext.createMediaStreamSource(stream);
+            sourceNode.connect(analyser);
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+            let animationFrameId;
+
+            const processAudio = () => {
+                analyser.getByteFrequencyData(dataArray);
+                let sum = 0;
+                for (let i = 0; i < dataArray.length; i++) {
+                    sum += dataArray[i];
+                }
+                const average = sum / dataArray.length;
+                const currentlySpeaking = average > SPEAKING_THRESHOLD;
+
+                setSpeakingParticipants(prev => {
+                    if (Boolean(prev[streamOwnerId]) !== currentlySpeaking) {
+                        return { ...prev, [streamOwnerId]: currentlySpeaking };
+                    }
+                    return prev;
+                });
+                animationFrameId = requestAnimationFrame(processAudio);
+            };
+            processAudio(); // Start the loop
+
+            remoteAnalysersRef.current[streamOwnerId] = { analyser, sourceNode, dataArray, animationFrameId };
+        };
+
+        const cleanupAnalyserForStream = (streamOwnerId) => {
+            const analyserSetup = remoteAnalysersRef.current[streamOwnerId];
+            if (analyserSetup) {
+                if (analyserSetup.animationFrameId) cancelAnimationFrame(analyserSetup.animationFrameId);
+                if (analyserSetup.sourceNode) {
+                    try { analyserSetup.sourceNode.disconnect(); } catch (e) { /* ignore */ }
+                }
+                delete remoteAnalysersRef.current[streamOwnerId];
+                setSpeakingParticipants(prev => {
+                    if (prev[streamOwnerId]) {
+                        const newState = { ...prev };
+                        delete newState[streamOwnerId];
+                        return newState;
+                    }
+                    return prev;
+                });
+            }
+        };
+
+        // Local stream analysis
+        if (localStream && !isMuted && currentUserId) {
+            setupAnalyserForStream(localStream, currentUserId);
+        } else if (currentUserId) { // Cleanup if local stream removed or muted
+            cleanupAnalyserForStream(currentUserId);
+        }
+
+        // Remote streams analysis
+        Object.entries(remoteStreams).forEach(([peerId, stream]) => {
+            if (stream && stream.active) { // Check if stream is valid and active
+                 // Ensure peerId is treated consistently (e.g. as string if keys are strings)
+                const id = String(peerId);
+                // Check if analyser already exists and if the stream object is the same
+                // This is tricky because MediaStream objects might be replaced.
+                // For simplicity, if a stream exists for peerId, we ensure an analyser is running.
+                // If an old analyser for a non-existent stream is found later, it will be cleaned up.
+                if (!remoteAnalysersRef.current[id] || remoteAnalysersRef.current[id].sourceNode.mediaStream !== stream) {
+                     setupAnalyserForStream(stream, id);
+                }
+            }
+        });
+
+        // Cleanup stale remote analysers (for peers who left)
+        const currentRemoteStreamKeys = new Set(Object.keys(remoteStreams).map(String));
+        Object.keys(remoteAnalysersRef.current).forEach(streamOwnerId => {
+            if (String(streamOwnerId) !== String(currentUserId) && !currentRemoteStreamKeys.has(String(streamOwnerId))) {
+                cleanupAnalyserForStream(streamOwnerId);
+            }
+        });
+
+        return () => {
+            // This cleanup runs when the component unmounts or dependencies change significantly
+            // For a full cleanup on unmount, iterate all in remoteAnalysersRef
+            Object.keys(remoteAnalysersRef.current).forEach(streamOwnerId => {
+                cleanupAnalyserForStream(streamOwnerId);
+            });
+            // The main Echo useEffect handles closing the audioContextRef.current when the component unmounts
+            // or localStream is permanently stopped. If not, it can be closed here too:
+            // if (audioContextRef.current && Object.keys(remoteAnalysersRef.current).length === 0) {
+            //   audioContextRef.current.close().catch(e => console.warn("Error closing audio context:", e));
+            //   audioContextRef.current = null;
+            // }
+        };
+    }, [localStream, remoteStreams, isMuted, currentUserId]);
+
+    // Optional: Log speaking participants changes for verification
+    useEffect(() => {
+        console.log("Speaking participants:", speakingParticipants);
+    }, [speakingParticipants]);
+
 
     // WebRTC: Start local audio stream
     const startLocalAudio = useCallback(async () => {
@@ -525,14 +650,17 @@ const canJoinSpace = isAuthenticated && currentUser && currentUser.id !== space?
                         <h3 className="text-xl font-semibold text-gb-white mb-3">Participants ({participants.length})</h3>
                         <ul className="space-y-3 max-h-[60vh] overflow-y-auto">
                             {participants.map(p => (
-                                <li key={p.id} className="flex items-center gap-3 p-2 bg-gb-dark-lighter rounded-md">
+                                <li key={p.id} className={`flex items-center gap-3 p-2 bg-gb-dark-lighter rounded-md transition-all duration-200 ${
+                                    speakingParticipants[p.id] ? 'ring-2 ring-gb-teal shadow-lg' : ''
+                                }`}>
                                     <img src={p.avatar_url || `${defaultAvatar}${encodeURIComponent(p.username)}`} alt={p.username} className="w-10 h-10 rounded-full object-cover"/>
                                     <div>
                                         <span className="font-medium text-gb-white">{p.username}</span>
                                         <span className="block text-xs text-gb-gray">{p.role_label || p.role}</span>
                                     </div>
                                     {p.has_raised_hand && <span className="ml-auto text-xl" title="Main levée">🖐️</span>}
-                                    {/* TODO: Ajouter indicateur mute, actions de modération ici si isHost */}
+                                    {speakingParticipants[p.id] && <span className="ml-auto text-xs text-gb-teal">🎙️</span>}
+                                    {/* TODO: Ajouter indicateur mute distant, actions de modération ici si isHost */}
                                 </li>
                             ))}
                         </ul>

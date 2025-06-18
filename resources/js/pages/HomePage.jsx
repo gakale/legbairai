@@ -4,8 +4,10 @@ import { getSpaces } from '../services/spaceService';
 import SpaceCard from '../components/spaces/SpaceCard';
 import Button from '../components/common/Button';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const HomePage = () => {
+    const { isAuthenticated } = useAuth();
     const [recentSpaces, setRecentSpaces] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
@@ -54,6 +56,16 @@ const HomePage = () => {
                     <h2 className="text-3xl md:text-4xl font-bold text-gb-white text-center mb-10 md:mb-12">
                         Découvrez les <span className="bg-gb-gradient-1 bg-clip-text text-transparent">Spaces Récents</span>
                     </h2>
+
+                    {isAuthenticated && (
+                        <div className="text-center mb-8">
+                            <Link to="/spaces/create">
+                                <Button variant="secondary">
+                                    Créer un Space
+                                </Button>
+                            </Link>
+                        </div>
+                    )}
 
                     {recentSpaces.length === 0 && (
                         <p className="text-center text-gb-light-gray">Aucun Space disponible pour le moment.</p>
