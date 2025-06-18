@@ -5,14 +5,14 @@ const API_URL = '/api/v1'; // Préfixe de base pour vos routes API
 
 const register = async (userData) => {
     // userData: { username, email, password, password_confirmation }
-    return axios.post(`${API_URL}/register`, userData);
+        return axios.post(`${API_URL}/register`, userData);
 };
 
 const login = async (credentials) => {
     // credentials: { email, password, device_name (optionnel pour nommer le token) }
     // D'abord, obtenir le cookie CSRF (important pour les SPAs avec Sanctum)
     await axios.get('/sanctum/csrf-cookie');
-    return axios.post(`${API_URL}/login`, { ...credentials, device_name: 'spa_session' });
+        return axios.post(`${API_URL}/login`, { ...credentials, device_name: 'spa_session' });
 };
 
 const logout = async () => {

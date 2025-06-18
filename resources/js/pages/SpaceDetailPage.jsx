@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import SpaceService, { joinSpace } from '../services/SpaceService'; // Updated import
+import SpaceService, { joinSpace } from '../services/spaceService'; // Correction de la casse
 import Button from '../components/common/Button';
 import Peer from 'simple-peer'; // WebRTC library
 
