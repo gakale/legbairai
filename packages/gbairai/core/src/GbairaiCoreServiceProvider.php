@@ -21,15 +21,7 @@ class GbairaiCoreServiceProvider extends PackageServiceProvider
             ->name('gbairai-core')
             ->hasConfigFile()
             // ->hasViews() // Si votre package fournit des vues Blade
-            ->hasMigrations([
-                'create_spaces_table', 
-                'create_space_participants_table', 
-                'create_space_messages_table', 
-                'create_space_recordings_table',
-                'create_follows_table',
-                'create_audio_clips_table',
-                // Ajoutez d'autres migrations ici au fur et à mesure
-            ])
+            ->hasMigrations() // Charger toutes les migrations du dossier par défaut
             // ->hasCommand(GbairaiCoreCommand::class) // Si vous ajoutez des commandes Artisan
             ->hasTranslations(); // Si votre package fournit des fichiers de traduction
             // ->hasRoute('web') // Si votre package fournit des routes web

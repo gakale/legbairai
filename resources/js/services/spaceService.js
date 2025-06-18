@@ -54,9 +54,14 @@ export const joinSpace = async (spaceId) => {
   return axios.post(`${API_URL}/${spaceId}/join`, {});
 };
 
+export const createSpace = (spaceData) => {
+  return axios.post(API_URL, spaceData);
+};
+
 const SpaceService = {
   getSpacesFeed,
   getSpaces, // Maintenir temporairement
+  createSpace,
   getSpaceDetails,
   fetchSpaces,
   getSpaceMessages,

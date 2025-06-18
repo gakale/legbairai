@@ -19,8 +19,10 @@ return new class extends Migration
             // Index might not exist, that's fine
         }
         
-        // Using raw SQL for PostgreSQL to change the column type
-        DB::statement('ALTER TABLE personal_access_tokens ALTER COLUMN tokenable_id TYPE VARCHAR(36)');
+        // Use Schema builder to change the column type
+        Schema::table('personal_access_tokens', function (Blueprint $table) {
+            $table->string('tokenable_id', 36)->change();
+        });
         
         // Recreate the index
         try {
@@ -43,8 +45,10 @@ return new class extends Migration
         }
         
         // Revert the column type back to bigint
-        // Note: This will set all values to NULL since UUIDs can't be cast to bigint
-        DB::statement('ALTER TABLE personal_access_tokens ALTER COLUMN tokenable_id TYPE BIGINT USING (null)');
+        Schema::table('personal_access_tokens', function (Blueprint $table) {
+            // Note: This will set all values to NULL since UUIDs can't be cast to bigint
+            $table->bigInteger('tokenable_id')->nullable()->change();
+        });
         
         // Recreate the index
         try {
