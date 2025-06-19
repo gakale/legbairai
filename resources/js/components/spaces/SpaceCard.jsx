@@ -1,93 +1,208 @@
 // resources/js/components/spaces/SpaceCard.jsx
 import React from 'react';
 import { Link } from 'react-router-dom';
-import Button from '../common/Button'; // Notre composant bouton
+import Button from '../common/Button';
 
-// Placeholder pour l'avatar par défaut de l'hôte ou image de couverture
-const defaultAvatar = "https://ui-avatars.com/api/?background=6B46C1&color=fff&size=128&name=";
-const defaultCover = "https://via.placeholder.com/400x200/1A1A2E/E2E8F0?text=Space+Image"; // Placeholder
+const SpaceCard = ({ space, onDelete, showActions = false }) => {
+    const defaultAvatar = "https://ui-avatars.com/api/?background=6B46C1&color=fff&size=128&name=";
+    
+    // Formatage des données
+    const participantCount = space.participants_count || 0;
+    const hostName = space.host?.display_name || space.host?.username || 'Hôte inconnu';
+    const hostAvatar = space.host?.avatar || `${defaultAvatar}${encodeURIComponent(hostName)}`;
+    
+    // Gestion du statut
+    const getStatusInfo = (status) => {
+        switch (status) {
+            case 'live':
+                return {
+                    text: 'En direct',
+                    className: 'bg-red-600 text-white',
+                    dot: '🔴'
+                };
+            case 'scheduled':
+                return {
+                    text: 'Programmé',
+                    className: 'bg-blue-600 text-white',
+                    dot: '📅'
+                };
+            case 'ended':
+                return {
+                    text: 'Terminé',
+                    className: 'bg-gray-600 text-white',
+                    dot: '⏹️'
+                };
+            default:
+                return {
+                    text: 'Inconnu',
+                    className: 'bg-gray-500 text-white',
+                    dot: '❓'
+                };
+        }
+    };
 
-const SpaceCard = ({ space }) => {
-    if (!space) return null;
+    const statusInfo = getStatusInfo(space.status);
 
-    const hostName = space.host?.username || 'Hôte inconnu';
-    const coverImageUrl = space.cover_image_url || `${defaultCover}&text=${encodeURIComponent(space.title)}`;
+    // Formatage de la date
+    const formatDate = (dateString) => {
+        if (!dateString) return null;
+        const date = new Date(dateString);
+        return date.toLocaleDateString('fr-FR', {
+            day: 'numeric',
+            month: 'short',
+            hour: '2-digit',
+            minute: '2-digit'
+        });
+    };
+
+    // Formatage du type de space
+    const getTypeInfo = (type) => {
+        switch (type) {
+            case 'public_free':
+                return { text: 'Public', icon: '🌐', className: 'text-green-400' };
+            case 'public_paid':
+                return { text: 'Payant', icon: '💰', className: 'text-yellow-400' };
+            case 'private':
+                return { text: 'Privé', icon: '🔒', className: 'text-purple-400' };
+            default:
+                return { text: 'Public', icon: '🌐', className: 'text-green-400' };
+        }
+    };
+
+    const typeInfo = getTypeInfo(space.type);
 
     return (
-        <div className="bg-gb-dark-lighter rounded-card shadow-lg overflow-hidden flex flex-col transition-all duration-300 hover:shadow-gb-strong hover:translate-y-[-5px]">
-            <Link to={`/space/${space.id}`} className="block">
-                <img
-                    src={coverImageUrl}
-                    alt={`Couverture pour ${space.title}`}
-                    className="w-full h-40 object-cover"
-                />
-            </Link>
-
-            <div className="p-5 flex flex-col flex-grow">
-                <div className="mb-3">
-                    {space.status === 'live' && (
-                        <span className="inline-block bg-gb-accent text-gb-white px-3 py-1 rounded-full text-xs font-semibold mr-2 animate-pulse">
-                            ● LIVE
-                        </span>
-                    )}
-                    {space.status === 'scheduled' && (
-                        <span className="inline-block bg-gb-primary-light text-gb-dark px-3 py-1 rounded-full text-xs font-semibold mr-2">
-                            Programmé
-                        </span>
-                    )}
-                    <span className="text-xs text-gb-gray">{space.type_label}</span>
+        <div className="bg-gb-dark-light rounded-lg border border-gb-gray-dark hover:border-gb-purple transition-all duration-200 overflow-hidden group">
+            {/* En-tête avec statut */}
+            <div className="p-4 pb-0">
+                <div className="flex items-center justify-between mb-3">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${statusInfo.className}`}>
+                        {statusInfo.dot} {statusInfo.text}
+                    </span>
+                    <span className={`flex items-center text-xs ${typeInfo.className}`}>
+                        {typeInfo.icon} {typeInfo.text}
+                    </span>
                 </div>
 
-                <Link to={`/space/${space.id}`} className="block mb-2">
-                    <h3 className="text-xl font-bold text-gb-white hover:text-gb-primary-light transition-colors duration-200 truncate" title={space.title}>
+                {/* Titre et description */}
+                <Link 
+                    to={`/spaces/${space.id}`}
+                    className="block group-hover:text-gb-purple transition-colors"
+                >
+                    <h3 className="text-lg font-semibold text-gb-white mb-2 line-clamp-2">
                         {space.title}
                     </h3>
                 </Link>
 
-                <div className="flex items-center text-sm text-gb-light-gray mb-3">
-                    <img
-                        src={space.host?.avatar_url || `${defaultAvatar}${encodeURIComponent(hostName)}`}
-                        alt={hostName}
-                        className="w-6 h-6 rounded-full mr-2 object-cover"
-                    />
-                    <span>Animé par <Link to={`/profile/${space.host?.id}`} className="font-semibold hover:underline">{hostName}</Link></span>
-                </div>
+                {space.description && (
+                    <p className="text-gb-light-gray text-sm mb-3 line-clamp-2">
+                        {space.description}
+                    </p>
+                )}
+            </div>
 
-                <p className="text-sm text-gb-gray mb-4 flex-grow line-clamp-3">
-                    {space.description || "Aucune description pour ce Space."}
-                </p>
-                <div className="flex justify-between items-center text-sm text-gb-light-gray mt-auto pt-3 border-t border-[rgba(255,255,255,0.1)]">
-                    <span>
-                        {space.status === 'live'
-                            ? `${space.active_participants_count || 0} participant(s)`
-                            : `Début: ${space.scheduled_at ? new Date(space.scheduled_at).toLocaleDateString('fr-FR', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}`
-                        }
-                    </span>
-                    <Link to={`/space/${space.id}`}>
-                        <Button variant="secondary" className="py-1 px-3 text-xs">
-                            {space.status === 'live' ? 'Rejoindre' : 'Voir Détails'}
-                        </Button>
-                    </Link>
+            {/* Informations de l'hôte */}
+            <div className="px-4 pb-3">
+                <div className="flex items-center space-x-3">
+                    <img
+                        src={hostAvatar}
+                        alt={`Avatar de ${hostName}`}
+                        className="w-8 h-8 rounded-full object-cover border border-gb-gray-dark"
+                    />
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-gb-white truncate">
+                            {hostName}
+                        </p>
+                        <div className="flex items-center space-x-4 text-xs text-gb-light-gray">
+                            <span>👥 {participantCount} participant{participantCount > 1 ? 's' : ''}</span>
+                            {space.scheduled_at && space.status === 'scheduled' && (
+                                <span>📅 {formatDate(space.scheduled_at)}</span>
+                            )}
+                        </div>
+                    </div>
                 </div>
             </div>
+
+            {/* Actions et boutons */}
+            <div className="px-4 pb-4">
+                <div className="flex items-center justify-between">
+                    <div className="flex space-x-2">
+                        {space.status === 'live' && (
+                            <Button
+                                to={`/spaces/${space.id}`}
+                                variant="primary"
+                                size="sm"
+                                className="flex items-center space-x-1"
+                            >
+                                <span>🎤</span>
+                                <span>Rejoindre</span>
+                            </Button>
+                        )}
+                        
+                        {space.status === 'scheduled' && (
+                            <Button
+                                to={`/spaces/${space.id}`}
+                                variant="outline"
+                                size="sm"
+                                className="flex items-center space-x-1"
+                            >
+                                <span>👁️</span>
+                                <span>Voir</span>
+                            </Button>
+                        )}
+
+                        {space.status === 'ended' && (
+                            <Button
+                                to={`/spaces/${space.id}`}
+                                variant="secondary"
+                                size="sm"
+                                className="flex items-center space-x-1"
+                            >
+                                <span>📝</span>
+                                <span>Résumé</span>
+                            </Button>
+                        )}
+                    </div>
+
+                    {/* Actions de gestion si c'est le propriétaire */}
+                    {showActions && (
+                        <div className="flex space-x-1">
+                            <Button
+                                to={`/spaces/${space.id}/edit`}
+                                variant="ghost"
+                                size="sm"
+                                className="p-2"
+                                title="Modifier"
+                            >
+                                ✏️
+                            </Button>
+                            {onDelete && (
+                                <Button
+                                    onClick={() => onDelete(space)}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="p-2 text-red-400 hover:text-red-300"
+                                    title="Supprimer"
+                                >
+                                    🗑️
+                                </Button>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Indicateur WebRTC pour les spaces live */}
+            {space.status === 'live' && (
+                <div className="bg-gradient-to-r from-gb-purple to-purple-600 px-4 py-2">
+                    <div className="flex items-center justify-center text-white text-xs">
+                        <span className="animate-pulse mr-2">🎧</span>
+                        <span>Audio WebRTC en temps réel</span>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };
-
-// Helper CSS pour clamp-lines (si vous voulez du clamping JS ou pour info)
-// Tailwind a un plugin pour line-clamp: @tailwindcss/line-clamp
-// npm install -D @tailwindcss/line-clamp
-// puis dans tailwind.config.js: plugins: [require('@tailwindcss/line-clamp')]
-// et utiliser: className="line-clamp-3"
-// Pour l'instant, on peut utiliser une astuce CSS ou laisser le texte déborder un peu.
-// J'ai ajouté une classe `clamp-lines-3` pour l'exemple, vous l'ajouteriez à votre app.css :
-/*
-.clamp-lines-3 {
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-}
-*/
 
 export default SpaceCard;

@@ -1,8 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import UserService from '../services/UserService';
+import { getSpacesByUser, getUserParticipatedSpaces } from '../services/spaceService';
 import { useAuth } from '../contexts/AuthContext';
 import Button from '../components/common/Button';
+import SpaceCard from '../components/spaces/SpaceCard';
+import CreateSpaceModal from '../components/spaces/CreateSpaceModal';
 
 // Placeholder pour l'avatar par défaut
 const defaultAvatar = "https://ui-avatars.com/api/?background=random&color=fff&size=128&name=";
@@ -17,6 +20,16 @@ const UserProfilePage = () => {
     const [error, setError] = useState('');
     const [isFollowing, setIsFollowing] = useState(false);
     const [followInProgress, setFollowInProgress] = useState(false);
+    
+    // États pour les espaces
+    const [spaces, setSpaces] = useState([]);
+    const [spacesLoading, setSpacesLoading] = useState(false);
+    const [spacesError, setSpacesError] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const [hasMorePages, setHasMorePages] = useState(false);
+    
+    // État pour le modal de création d'espace
+    const [showCreateModal, setShowCreateModal] = useState(false);
 
     const fetchProfile = useCallback(async () => {
         setIsLoading(true);
@@ -37,12 +50,40 @@ const UserProfilePage = () => {
         }
         setIsLoading(false);
     }, [userId, navigate]);
+    
+    // Fonction pour charger les espaces créés par l'utilisateur
+    const fetchUserSpaces = useCallback(async (page = 1) => {
+        if (!userId) return;
+        
+        setSpacesLoading(true);
+        setSpacesError('');
+        
+        try {
+            const response = await getSpacesByUser(userId, page);
+            const { data, meta } = response.data;
+            
+            if (page === 1) {
+                setSpaces(data);
+            } else {
+                setSpaces(prevSpaces => [...prevSpaces, ...data]);
+            }
+            
+            setCurrentPage(meta.current_page);
+            setHasMorePages(meta.current_page < meta.last_page);
+        } catch (err) {
+            console.error("Erreur chargement des espaces:", err);
+            setSpacesError("Impossible de charger les espaces.");
+        }
+        
+        setSpacesLoading(false);
+    }, [userId]);
 
     useEffect(() => {
         if (userId) {
             fetchProfile();
+            fetchUserSpaces(1);
         }
-    }, [userId, fetchProfile]);
+    }, [userId, fetchProfile, fetchUserSpaces]);
 
     const handleFollowToggle = async () => {
         if (!isAuthenticated || !currentUser) {
@@ -90,6 +131,18 @@ const UserProfilePage = () => {
 
     return (
         <div className="container mx-auto py-10 px-4">
+            {/* Modal de création d'espace */}
+            {showCreateModal && (
+                <CreateSpaceModal 
+                    isOpen={showCreateModal}
+                    onClose={() => setShowCreateModal(false)}
+                    onSpaceCreated={(newSpace) => {
+                        setSpaces(prevSpaces => [newSpace, ...prevSpaces]);
+                        setShowCreateModal(false);
+                    }}
+                />
+            )}
+            
             <div className="max-w-3xl mx-auto bg-gb-dark-lighter rounded-card shadow-gb-strong p-6 md:p-10">
                 <div className="flex flex-col items-center md:flex-row md:items-start gap-6 md:gap-8">
                     <img
@@ -137,11 +190,55 @@ const UserProfilePage = () => {
                     </div>
                 </div>
 
-                {/* Section pour les Spaces créés par l'utilisateur (à venir) */}
+                {/* Section pour les Spaces créés par l'utilisateur */}
                 <div className="mt-10 pt-6 border-t border-[rgba(255,255,255,0.1)]">
-                    <h2 className="text-2xl font-semibold text-gb-white mb-4">Spaces Créés</h2>
-                    <p className="text-gb-light-gray">Les Spaces de {profileUser.username} apparaîtront ici.</p>
-                    {/* Grille de SpaceCard ici */}
+                    <div className="flex justify-between items-center mb-6">
+                        <h2 className="text-2xl font-semibold text-gb-white">Spaces Créés</h2>
+                        {isAuthenticated && currentUser && currentUser.id === profileUser.id && (
+                            <Button 
+                                onClick={() => setShowCreateModal(true)} 
+                                variant="primary"
+                                className="flex items-center gap-2"
+                            >
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+                                </svg>
+                                Créer un Space
+                            </Button>
+                        )}
+                    </div>
+                    
+                    {spacesError && (
+                        <div className="text-red-400 mb-4">{spacesError}</div>
+                    )}
+                    
+                    {spaces.length > 0 ? (
+                        <>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {spaces.map(space => (
+                                    <SpaceCard key={space.id} space={space} />
+                                ))}
+                            </div>
+                            
+                            {hasMorePages && (
+                                <div className="mt-6 text-center">
+                                    <Button 
+                                        onClick={() => fetchUserSpaces(currentPage + 1)}
+                                        variant="secondary"
+                                        disabled={spacesLoading}
+                                    >
+                                        {spacesLoading ? 'Chargement...' : 'Voir plus'}
+                                    </Button>
+                                </div>
+                            )}
+                        </>
+                    ) : (
+                        <p className="text-gb-light-gray">
+                            {spacesLoading 
+                                ? 'Chargement des spaces...' 
+                                : `${profileUser.username} n'a pas encore créé de space.`}
+                        </p>
+                    )}
                 </div>
 
                  {/* Section pour les Clips Audio créés par l'utilisateur (à venir) */}

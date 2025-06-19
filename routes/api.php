@@ -62,6 +62,13 @@ Route::middleware('auth:sanctum')->prefix('v1')->name('api.v1.')->group(function
 
     // --- Routes pour les Utilisateurs (Profils, Suivi) ---
     Route::prefix('users')->name('users.')->group(function () {
+        // Récupérer les spaces créés par un utilisateur
+        Route::get('/{user}/spaces', [UserApiController::class, 'getUserSpaces'])->name('spaces');
+        
+        // Récupérer les spaces où un utilisateur a participé
+        Route::get('/{user}/participated-spaces', [UserApiController::class, 'getParticipatedSpaces'])->name('participated-spaces');
+        
+        // Routes de suivi existantes
         Route::post('/{user}/follow', [UserApiController::class, 'follow'])->name('follow');
         Route::delete('/{user}/unfollow', [UserApiController::class, 'unfollow'])->name('unfollow');
     });

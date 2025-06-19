@@ -4,11 +4,13 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\User; // Modèle User de l'application
+use App\Models\Space;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Gbairai\Core\Actions\Users\FollowUserAction;
 use Gbairai\Core\Actions\Users\UnfollowUserAction;
 use App\Http\Resources\UserResource as ApiUserResource; // Alias
+use App\Http\Resources\SpaceResource as ApiSpaceResource; // Alias pour la ressource Space
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Response;
 
@@ -62,5 +64,66 @@ class UserApiController extends Controller
         } catch (\Exception $e) {
             return response()->json(['message' => $e->getMessage()], 400);
         }
+    }
+
+    /**
+     * Récupérer les spaces créés par un utilisateur
+     */
+    public function getUserSpaces(Request $request, User $user)
+    {
+        $validatedData = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:50'],
+            'status' => ['sometimes', 'string', 'in:scheduled,live,ended'],
+        ]);
+
+        $page = $validatedData['page'] ?? 1;
+        $perPage = $validatedData['per_page'] ?? 20;
+        $status = $validatedData['status'] ?? null;
+
+        $query = $user->hostedSpaces()
+            ->with(['host'])
+            ->withCount(['participants' => function ($query) {
+                $query->whereNull('left_at');
+            }])
+            ->orderBy('created_at', 'desc');
+
+        // Filtrer par statut si spécifié
+        if ($status) {
+            $query->where('status', $status);
+        }
+
+        $spaces = $query->paginate($perPage, ['*'], 'page', $page);
+
+        return ApiSpaceResource::collection($spaces);
+    }
+
+    /**
+     * Récupérer les spaces où un utilisateur a participé
+     */
+    public function getParticipatedSpaces(Request $request, User $user)
+    {
+        $validatedData = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:50'],
+        ]);
+
+        $page = $validatedData['page'] ?? 1;
+        $perPage = $validatedData['per_page'] ?? 20;
+
+        // Récupérer les spaces où l'utilisateur a participé
+        $spaceIds = $user->spaceParticipations()
+            ->distinct()
+            ->pluck('space_id');
+
+        $spaces = Space::whereIn('id', $spaceIds)
+            ->with(['host'])
+            ->withCount(['participants' => function ($query) {
+                $query->whereNull('left_at');
+            }])
+            ->orderBy('created_at', 'desc')
+            ->paginate($perPage, ['*'], 'page', $page);
+
+        return ApiSpaceResource::collection($spaces);
     }
 }
