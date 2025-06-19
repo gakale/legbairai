@@ -186,10 +186,30 @@ export const spaceService = {
      */
     sendAudioSignal: async (spaceId, signalData) => {
         try {
-            const response = await axios.post(`${API_URL}/${spaceId}/audio-signal`, { signalData });
+            // Extraire le signal seul pour l'envoyer au serveur
+            const response = await axios.post(`${API_URL}/${spaceId}/audio-signal`, { 
+                signalData: signalData.signal // Envoyer seulement le signal WebRTC
+            });
             return response.data;
         } catch (error) {
             console.error(`Erreur lors de l'envoi du signal audio pour le space ${spaceId}:`, error);
+            throw error;
+        }
+    },
+    
+    /**
+     * Sauvegarder un enregistrement audio d'un espace
+     */
+    saveRecording: async (spaceId, formData) => {
+        try {
+            const response = await axios.post(`${API_URL}/${spaceId}/recordings`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data'
+                }
+            });
+            return response.data;
+        } catch (error) {
+            console.error(`Erreur lors de la sauvegarde de l'enregistrement pour le space ${spaceId}:`, error);
             throw error;
         }
     },

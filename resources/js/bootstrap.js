@@ -32,12 +32,12 @@ if (isUserAuthenticated()) {
     console.log('Initialisation de Laravel Echo pour utilisateur authentifié');
     window.Echo = new Echo({
         broadcaster: 'reverb', // Indique à Echo d'utiliser le driver Reverb
-        key: import.meta.env.VITE_REVERB_APP_KEY,
-        wsHost: import.meta.env.VITE_REVERB_HOST,
-        wsPort: import.meta.env.VITE_REVERB_PORT,
-        wssPort: import.meta.env.VITE_REVERB_PORT, // Pourrait être différent si vous utilisez un port TLS dédié
-        forceTLS: (import.meta.env.VITE_REVERB_SCHEME ?? 'http') === 'https',
-        enabledTransports: ['ws', 'wss'], // Autoriser les transports WebSocket sécurisés et non sécurisés
+        key: 'legbairai-key', // Clé par défaut pour Reverb
+        wsHost: '127.0.0.1',
+        wsPort: 8080, // Port du serveur Reverb
+        forceTLS: false, // Désactiver TLS pour le développement local
+        disableStats: true, // Désactiver les statistiques pour éviter des erreurs
+        enabledTransports: ['ws'], // Utiliser uniquement WebSocket non sécurisé pour le développement
         // Configuration simplifiée pour le débogage
         csrfToken: document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
         withCredentials: true, // Important pour envoyer les cookies

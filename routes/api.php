@@ -58,6 +58,7 @@ Route::middleware('auth:sanctum')->prefix('v1')->name('api.v1.')->group(function
         Route::post('/messages/{spaceMessage}/toggle-pin', [UserSpaceInteractionApiController::class, 'togglePinMessage'])->name('messages.togglePin');
         Route::post('/{space}/clips', [AudioClipApiController::class, 'store'])->name('clips.store');
         Route::post('/{space}/audio-signal', [SpaceApiController::class, 'handleAudioSignal'])->name('audio.signal'); // Route for WebRTC signaling
+        Route::post('/{space}/recordings', [SpaceApiController::class, 'saveRecording'])->name('recordings.store'); // Route pour sauvegarder les enregistrements audio
     });
 
     // --- Routes pour les Utilisateurs (Profils, Suivi) ---

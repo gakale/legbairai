@@ -225,4 +225,83 @@ class SpaceApiController extends Controller
 
         return response()->json(['message' => 'Signal processed']);
     }
+    
+    /**
+     * Save audio recording for a space.
+     * Only the space host can save recordings.
+     */
+    public function saveRecording(Request $request, Space $space): JsonResponse
+    {
+        // Déboguer les erreurs 500
+        try {
+            $user = Auth::user();
+            if (!$user) {
+                return response()->json(['message' => 'Unauthenticated.'], 401);
+            }
+            
+            if ($user->id !== $space->host_user_id) {
+                return response()->json(['message' => 'Seul le créateur de l\'espace peut enregistrer.'], 403);
+            }
+        
+            // Valider les données entrantes avec une validation minimale
+            // Nous acceptons tous les types de fichiers pour éviter les problèmes de détection MIME
+            try {
+                $validated = $request->validate([
+                    'audio_file' => 'required|file|max:102400', // 100MB max
+                    'duration_seconds' => 'nullable|integer|min:0',
+                ]);
+            } catch (\Illuminate\Validation\ValidationException $e) {
+                return response()->json([
+                    'message' => 'Erreur de validation',
+                    'errors' => $e->errors()
+                ], 422);
+            }
+            
+            // Vérifier si le fichier audio est présent et valide
+            if (!$request->hasFile('audio_file') || !$request->file('audio_file')->isValid()) {
+                return response()->json([
+                    'message' => 'Fichier audio invalide ou manquant',
+                    'errors' => ['audio_file' => ['Le fichier audio est invalide ou manquant']]
+                ], 422);
+            }
+            
+            // Générer un nom de fichier unique
+            $fileName = 'space_' . $space->id . '_' . time() . '.' . $request->audio_file->extension();
+            
+            // Stocker le fichier dans le dossier 'recordings'
+            $filePath = $request->file('audio_file')->storeAs('recordings', $fileName, 'public');
+            
+            // Vérifier si le stockage a réussi
+            if (!$filePath) {
+                throw new \Exception('Impossible de stocker le fichier audio. Vérifiez les permissions du dossier de stockage.');
+            }
+            
+            // Calculer la taille du fichier en MB
+            $fileSize = $request->file('audio_file')->getSize() / 1024 / 1024; // Convertir octets en MB
+            
+            // Créer l'enregistrement dans la base de données
+            $recording = \Gbairai\Core\Models\SpaceRecording::create([
+                'space_id' => $space->id,
+                'recording_url' => '/storage/' . $filePath,
+                'file_size_mb' => $fileSize,
+                'duration_seconds' => $request->duration_seconds ?? 0,
+                'is_publicly_accessible' => true, // Par défaut, l'enregistrement est public
+            ]);
+            
+            return response()->json([
+                'message' => 'Enregistrement sauvegardé avec succès',
+                'recording' => $recording
+            ], 201);
+        } catch (\Exception $e) {
+            // Capturer et logger toutes les erreurs
+            \Log::error('Erreur lors de la sauvegarde de l\'enregistrement: ' . $e->getMessage());
+            \Log::error($e->getTraceAsString());
+            
+            return response()->json([
+                'message' => 'Une erreur est survenue lors de la sauvegarde de l\'enregistrement',
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ], 500);
+        }
+    }
 }

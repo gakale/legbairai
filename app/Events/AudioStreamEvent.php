@@ -66,8 +66,9 @@ class AudioStreamEvent implements ShouldBroadcastNow
     {
         // This data will be received by clients listening on the PresenceChannel
         return [
-            'user_id' => $this->userId, // The ID of the user sending the signal
+            'from' => $this->userId, // Renommer pour correspondre au client
             'signal' => $this->signalData, // The actual WebRTC signal (offer, answer, ICE candidate)
+            'user_id' => $this->userId, // Garder pour compatibilité
         ];
     }
 }

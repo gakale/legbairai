@@ -28,6 +28,12 @@ const SpaceDetailPage = () => {
     const [peers, setPeers] = useState({});
     const [remoteStreams, setRemoteStreams] = useState({});
     const [isMuted, setIsMuted] = useState(true);
+    
+    // États d'enregistrement
+    const [isRecording, setIsRecording] = useState(false);
+    const [recorder, setRecorder] = useState(null);
+    const [recordingTime, setRecordingTime] = useState(0);
+    const recordingTimerRef = useRef(null);
     const [isDeafened, setIsDeafened] = useState(false);
     const [speakingParticipants, setSpeakingParticipants] = useState({});
 
@@ -68,6 +74,14 @@ const SpaceDetailPage = () => {
     // Initialiser le stream audio local
     const initializeLocalStream = useCallback(async () => {
         try {
+            // Vérifier l'état des permissions
+            navigator.permissions.query({ name: 'microphone' }).then((result) => {
+                console.log('Permission microphone:', result.state);
+                if (result.state === 'denied') {
+                    setError('Accès au microphone refusé. Veuillez autoriser l\'accès dans les paramètres de votre navigateur.');
+                }
+            });
+            
             const stream = await navigator.mediaDevices.getUserMedia({
                 audio: {
                     echoCancellation: true,
@@ -176,8 +190,9 @@ const SpaceDetailPage = () => {
             });
 
             // Écouter les signaux WebRTC
-            channel.listen('AudioSignal', (e) => {
-                handleIncomingSignal(e.signal, e.from);
+            channel.listen('.audio.signal', (e) => {
+                console.log('Signal WebRTC reçu:', e);
+                handleIncomingSignal(e.signal, e.user_id);
             });
 
         } catch (err) {
@@ -343,7 +358,11 @@ const SpaceDetailPage = () => {
 
             peer.on('signal', (data) => {
                 // Envoyer le signal via WebSocket
-                console.log(`Envoi signal à ${userId}:`, data.type || 'candidat ICE');
+                console.log(`=== ENVOI SIGNAL ===`);
+                console.log(`À: ${userId}`);
+                console.log(`Type: ${data.type || 'candidat ICE'}`);
+                console.log(`Signal complet:`, data);
+                
                 spaceService.sendAudioSignal(spaceId, {
                     signal: data,
                     to: userId,
@@ -372,27 +391,48 @@ const SpaceDetailPage = () => {
                     playRemoteStream(remoteStream, userId);
                 }
             });
-
+            
             peer.on('error', (err) => {
                 console.error(`Erreur peer avec ${userId}:`, err);
-            });
-
-            peer.on('close', () => {
-                console.log(`Connexion fermée avec: ${userId}`);
+                // Nettoyer la référence en cas d'erreur
+                if (peersRef.current[userId]) {
+                    try {
+                        peersRef.current[userId].destroy();
+                    } catch (e) {
+                        console.warn('Erreur lors de la destruction du peer après erreur:', e);
+                    }
+                    delete peersRef.current[userId];
+                }
                 
-                // Supprimer l'élément audio
+                // Tenter de recréer la connexion après une erreur (avec délai)
+                setTimeout(() => {
+                    if (!peersRef.current[userId] && participants.some(p => p.id === userId)) {
+                        console.log(`Tentative de reconnexion avec ${userId} après erreur...`);
+                        const newPeer = createPeerConnection(userId, true);
+                        if (newPeer) {
+                            peersRef.current[userId] = newPeer;
+                        }
+                    }
+                }, 2000); // Délai de 2 secondes avant reconnexion
+            });
+            
+            peer.on('close', () => {
+                console.log(`Connexion fermée avec ${userId}`);
+                delete peersRef.current[userId];
+                
+                // Supprimer également le stream distant et l'élément audio
+                setRemoteStreams(prev => {
+                    const newStreams = {...prev};
+                    delete newStreams[userId];
+                    return newStreams;
+                });
+                
+                // Supprimer l'élément audio du DOM
                 const audioElement = document.getElementById(`audio-${userId}`);
                 if (audioElement) {
                     audioElement.srcObject = null;
                     audioElement.remove();
                 }
-                
-                // Nettoyer les références
-                setRemoteStreams(prev => {
-                    const newStreams = { ...prev };
-                    delete newStreams[userId];
-                    return newStreams;
-                });
             });
 
             peersRef.current[userId] = peer;
@@ -417,10 +457,14 @@ const SpaceDetailPage = () => {
         
         let peer = peersRef.current[fromUserId];
         
-        // Si on reçoit une offre mais qu'on a déjà une connexion, recréer la connexion
+        // Si on reçoit une offre, toujours recréer la connexion pour éviter les conflits
         if (signal.type === 'offer' && peer) {
-            console.log('Offre reçue pour une connexion existante, recréation...');
-            peer.destroy();
+            console.log(`Offre reçue pour une connexion existante avec ${fromUserId}, recréation...`);
+            try {
+                peer.destroy();
+            } catch (e) {
+                console.warn('Erreur lors de la destruction du peer existant:', e);
+            }
             delete peersRef.current[fromUserId];
             peer = null;
         }
@@ -433,10 +477,22 @@ const SpaceDetailPage = () => {
 
         if (peer) {
             try {
+                // Vérifier si le peer n'est pas détruit avant d'appliquer le signal
+                if (peer._destroyed) {
+                    console.warn(`Le peer pour ${fromUserId} a été détruit, recréation d'une nouvelle connexion`);
+                    // Supprimer l'ancienne référence
+                    delete peersRef.current[fromUserId];
+                    // Créer un nouveau peer
+                    peer = createPeerConnection(fromUserId, false);
+                    peersRef.current[fromUserId] = peer;
+                }
+                
                 console.log(`Application du signal de ${fromUserId}`);
                 peer.signal(signal);
             } catch (err) {
                 console.error(`Erreur lors de l'application du signal de ${fromUserId}:`, err);
+                // En cas d'erreur, nettoyer la référence pour éviter des erreurs futures
+                delete peersRef.current[fromUserId];
             }
         } else {
             console.error(`Impossible de créer une connexion peer avec ${fromUserId}`);
@@ -509,40 +565,235 @@ const SpaceDetailPage = () => {
         }
     }, [spaceId, newMessageContent]);
 
+    // Fonction pour nettoyer toutes les connexions WebRTC
+    const cleanupWebRTC = useCallback(() => {
+        // Nettoyer les connexions WebRTC
+        Object.values(peersRef.current).forEach(peer => {
+            try {
+                peer.destroy();
+            } catch (e) {
+                console.warn('Erreur destruction peer:', e);
+            }
+        });
+        peersRef.current = {};
+        setPeers({});
+        setRemoteStreams({});
+
+        // Arrêter le stream local
+        if (localStreamRef.current) {
+            localStreamRef.current.getTracks().forEach(track => track.stop());
+            localStreamRef.current = null;
+            setLocalStream(null);
+        }
+
+        // Déconnecter WebSocket
+        if (echoChannelRef.current) {
+            window.Echo.leave(`space.${spaceId}`);
+            echoChannelRef.current = null;
+        }
+    }, [spaceId]);
+    
+    // Fonctions d'enregistrement audio (réservées au créateur)
+    const startRecording = useCallback(() => {
+        if (!localStreamRef.current) {
+            console.error("Pas de flux audio local disponible");
+            return;
+        }
+        
+        try {
+            // Détecter le format d'enregistrement supporté par le navigateur
+            const mimeTypes = ['audio/webm', 'audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'];
+            let mimeType = '';
+            
+            for (const type of mimeTypes) {
+                if (MediaRecorder.isTypeSupported(type)) {
+                    mimeType = type;
+                    console.log(`Format d'enregistrement supporté: ${mimeType}`);
+                    break;
+                }
+            }
+            
+            if (!mimeType) {
+                throw new Error("Aucun format d'enregistrement audio supporté par ce navigateur");
+            }
+            
+            // Vérifier si nous avons des pistes audio disponibles
+            if (!localStreamRef.current || !localStreamRef.current.getAudioTracks().length) {
+                throw new Error("Aucune piste audio locale disponible pour l'enregistrement");
+            }
+            
+            // Utiliser uniquement le flux audio local pour une meilleure compatibilité
+            // La combinaison de flux peut causer des problèmes sur certains navigateurs
+            const audioTracks = localStreamRef.current.getAudioTracks().map(track => track.clone());
+            
+            // Si nous avons des flux distants et qu'ils sont disponibles, les ajouter
+            if (Object.values(remoteStreams).length > 0) {
+                Object.values(remoteStreams).forEach(stream => {
+                    if (stream && stream.getAudioTracks().length > 0) {
+                        stream.getAudioTracks().forEach(track => {
+                            audioTracks.push(track.clone());
+                        });
+                    }
+                });
+            }
+            
+            if (audioTracks.length === 0) {
+                throw new Error("Aucune piste audio disponible pour l'enregistrement");
+            }
+            
+            // Créer un nouveau MediaStream avec les pistes audio
+            const combinedStream = new MediaStream(audioTracks);
+            
+            // Créer un MediaRecorder avec les options optimisées
+            const mediaRecorder = new MediaRecorder(combinedStream, {
+                mimeType: mimeType,
+                audioBitsPerSecond: 128000 // 128 kbps pour une qualité audio raisonnable
+            });
+            
+            const audioChunks = [];
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    audioChunks.push(event.data);
+                }
+            };
+            
+            // Stocker le type MIME détecté pour l'utiliser lors de la création du Blob
+            const detectedMimeType = mimeType;
+            
+            mediaRecorder.onstop = async () => {
+                // Déterminer l'extension de fichier appropriée en fonction du type MIME
+                let fileExtension = 'webm';
+                if (detectedMimeType.includes('mp4')) {
+                    fileExtension = 'mp4';
+                } else if (detectedMimeType.includes('ogg')) {
+                    fileExtension = 'ogg';
+                }
+                
+                // Créer un blob avec tous les chunks audio en utilisant le type MIME détecté
+                const audioBlob = new Blob(audioChunks, { type: detectedMimeType });
+                
+                // Créer un fichier à partir du blob avec l'extension appropriée
+                const audioFile = new File([audioBlob], `space-${spaceId}-recording.${fileExtension}`, {
+                    type: detectedMimeType,
+                    lastModified: Date.now()
+                });
+                
+                // Créer un FormData pour l'envoi au serveur
+                const formData = new FormData();
+                formData.append('audio_file', audioFile);
+                formData.append('duration_seconds', parseInt(recordingTime, 10) || 0);
+                
+                try {
+                    // Envoyer l'enregistrement au serveur
+                    const response = await spaceService.saveRecording(spaceId, formData);
+                    console.log('Enregistrement sauvegardé avec succès', response);
+                    
+                    // Notifier les utilisateurs que l'enregistrement est disponible
+                    if (window.Echo) {
+                        window.Echo.private(`space.${spaceId}`)
+                            .whisper('recording.saved', {
+                                user_id: currentUser.id,
+                                username: currentUser.username,
+                                message: "L'enregistrement de cette session est maintenant disponible"
+                            });
+                    }
+                } catch (error) {
+                    console.error('Erreur lors de la sauvegarde de l\'enregistrement', error);
+                }
+                
+                // Réinitialiser le timer
+                clearInterval(recordingTimerRef.current);
+                setRecordingTime(0);
+            };
+            
+            // Démarrer l'enregistrement
+            mediaRecorder.start(1000); // Enregistrer par blocs de 1 seconde
+            setIsRecording(true);
+            setRecorder(mediaRecorder);
+            
+            // Démarrer le timer d'enregistrement
+            recordingTimerRef.current = setInterval(() => {
+                setRecordingTime(prev => prev + 1);
+            }, 1000);
+            
+            // Notifier les utilisateurs que l'enregistrement a commencé
+            if (window.Echo) {
+                window.Echo.private(`space.${spaceId}`)
+                    .whisper('recording.started', {
+                        user_id: currentUser.id,
+                        username: currentUser.username,
+                        message: "L'enregistrement de cette session a commencé"
+                    });
+            }
+            
+            console.log('Enregistrement démarré');
+        } catch (error) {
+            console.error('Erreur lors du démarrage de l\'enregistrement', error);
+            
+            // Afficher un message d'erreur plus détaillé
+            let errorMessage = 'Impossible de démarrer l\'enregistrement audio.';
+            
+            if (error.name === 'NotSupportedError') {
+                errorMessage = 'Votre navigateur ne prend pas en charge ce format d\'enregistrement audio. Essayez avec Chrome ou Firefox récent.';
+            } else if (error.message) {
+                errorMessage = error.message;
+            }
+            
+            // Réinitialiser l'état d'enregistrement
+            setIsRecording(false);
+            setRecorder(null);
+        }
+    }, [localStreamRef, remoteStreams, spaceId, currentUser]);
+    
+    // Fonction pour arrêter l'enregistrement
+    const stopRecording = useCallback(() => {
+        if (recorder && recorder.state !== 'inactive') {
+            recorder.stop();
+            setIsRecording(false);
+            setRecorder(null);
+            
+            // Notifier les utilisateurs que l'enregistrement est terminé
+            if (window.Echo) {
+                window.Echo.private(`space.${spaceId}`)
+                    .whisper('recording.stopped', {
+                        user_id: currentUser.id,
+                        username: currentUser.username,
+                        message: "L'enregistrement de cette session est terminé"
+                    });
+            }
+            
+            console.log('Enregistrement arrêté');
+        }
+    }, [recorder, spaceId, currentUser]);
+
+    // Formater le temps d'enregistrement (mm:ss)
+    const formatRecordingTime = useCallback(() => {
+        const minutes = Math.floor(recordingTime / 60);
+        const seconds = recordingTime % 60;
+        return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+    }, [recordingTime]);
+    
     // Quitter le space
     const handleLeaveSpace = useCallback(async () => {
         try {
-            // Nettoyer les connexions WebRTC
-            Object.values(peersRef.current).forEach(peer => {
-                peer.destroy();
-            });
-            peersRef.current = {};
-            setPeers({});
-            setRemoteStreams({});
-
-            // Arrêter le stream local
-            if (localStreamRef.current) {
-                localStreamRef.current.getTracks().forEach(track => track.stop());
-                localStreamRef.current = null;
-                setLocalStream(null);
+            // Arrêter l'enregistrement s'il est en cours
+            if (isRecording) {
+                stopRecording();
             }
-
-            // Déconnecter WebSocket
-            if (echoChannelRef.current) {
-                window.Echo.leave(`space.${spaceId}`);
-                echoChannelRef.current = null;
-            }
-
-            // Quitter via l'API
+            
+            // Arrêter tous les streams et connexions
+            cleanupWebRTC();
+            
+            // Déconnecter via l'API
             await spaceService.leave(spaceId);
             
             setHasJoined(false);
             setConnectionStatus('Déconnecté');
-            navigate('/');
         } catch (err) {
             console.error('Erreur quitter space:', err);
         }
-    }, [spaceId, navigate]);
+    }, [spaceId, cleanupWebRTC, isRecording, stopRecording]);
 
     // Faire défiler vers le bas
     const scrollToBottom = useCallback(() => {
@@ -742,6 +993,35 @@ const SpaceDetailPage = () => {
                                             {isDeafened ? 'Son coupé' : 'Son actif'}
                                         </div>
                                     </div>
+                                    
+                                    {/* Boutons d'enregistrement (uniquement pour le créateur) */}
+                                    {isHost && (
+                                        <div className="ml-6 flex items-center space-x-3">
+                                            {isRecording ? (
+                                                <>
+                                                    <button
+                                                        onClick={stopRecording}
+                                                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md flex items-center space-x-2"
+                                                        title="Arrêter l'enregistrement"
+                                                    >
+                                                        <span>⏹ Arrêter</span>
+                                                    </button>
+                                                    <div className="text-red-500 animate-pulse flex items-center">
+                                                        <span className="mr-2">⚫</span>
+                                                        <span>{formatRecordingTime()}</span>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <button
+                                                    onClick={startRecording}
+                                                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md flex items-center space-x-2"
+                                                    title="Démarrer l'enregistrement"
+                                                >
+                                                    <span>⏺ Enregistrer</span>
+                                                </button>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         )}
