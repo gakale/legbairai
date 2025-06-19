@@ -186,34 +186,128 @@ const SpaceDetailPage = () => {
         }
     }, [spaceId, currentUser]);
 
-    // Jouer un stream distant - défini avant createPeerConnection pour éviter les références circulaires
+    // Version améliorée de playRemoteStream avec plus de debugging
     const playRemoteStream = useCallback((stream, userId) => {
-        // Vérifier si un élément audio existe déjà pour cet utilisateur
-        let audio = document.getElementById(`audio-${userId}`);
+        console.log(`=== DEBUT playRemoteStream pour ${userId} ===`);
         
-        // Si non, créer un nouvel élément audio
-        if (!audio) {
-            audio = document.createElement('audio');
-            audio.id = `audio-${userId}`;
-            audio.autoplay = true;
-            audio.playsInline = true;
-            audio.controls = false; // Masquer les contrôles
-            document.body.appendChild(audio); // Ajouter au DOM pour que le son fonctionne
+        // Vérifier le stream
+        if (!stream) {
+            console.error('Stream vide pour', userId);
+            return;
         }
         
-        // Assigner le stream et jouer
-        audio.srcObject = stream;
-        audio.volume = 1.0;
+        const audioTracks = stream.getAudioTracks();
+        console.log(`Nombre de pistes audio: ${audioTracks.length}`);
         
-        console.log(`Lecture audio de l'utilisateur ${userId} configurée`);
-        
-        audio.play().catch(err => {
-            console.error('Erreur lecture audio:', err);
+        audioTracks.forEach((track, index) => {
+            console.log(`Piste ${index}:`, {
+                enabled: track.enabled,
+                readyState: track.readyState,
+                muted: track.muted,
+                kind: track.kind,
+                label: track.label
+            });
         });
         
-        // Retourner l'élément audio pour pouvoir le nettoyer plus tard
+        // Vérifier si un élément audio existe déjà
+        let audio = document.getElementById(`audio-${userId}`);
+        
+        if (audio) {
+            console.log('Élément audio existant trouvé, nettoyage...');
+            audio.srcObject = null;
+            audio.remove();
+        }
+        
+        // Créer un nouvel élément audio
+        audio = document.createElement('audio');
+        audio.id = `audio-${userId}`;
+        audio.autoplay = true;
+        audio.playsInline = true;
+        audio.controls = true; // TEMPORAIRE : montrer les contrôles pour debug
+        audio.volume = 1.0;
+        
+        // Ajouter des listeners pour debug
+        audio.addEventListener('loadstart', () => console.log(`${userId}: loadstart`));
+        audio.addEventListener('loadeddata', () => console.log(`${userId}: loadeddata`));
+        audio.addEventListener('canplay', () => console.log(`${userId}: canplay`));
+        audio.addEventListener('playing', () => console.log(`${userId}: PLAYING - AUDIO MARCHE!`));
+        audio.addEventListener('error', (e) => console.error(`${userId}: erreur audio:`, e));
+        audio.addEventListener('pause', () => console.log(`${userId}: pause`));
+        audio.addEventListener('ended', () => console.log(`${userId}: ended`));
+        
+        // Ajouter au DOM
+        document.body.appendChild(audio);
+        console.log('Élément audio ajouté au DOM');
+        
+        // Assigner le stream
+        audio.srcObject = stream;
+        console.log('Stream assigné à l\'élément audio');
+        
+        // Forcer la lecture
+        audio.play()
+            .then(() => {
+                console.log(`${userId}: Lecture audio démarrée avec succès!`);
+            })
+            .catch(err => {
+                console.error(`${userId}: Erreur lecture audio:`, err);
+                
+                // Si autoplay bloqué, demander interaction utilisateur
+                if (err.name === 'NotAllowedError') {
+                    console.log('Autoplay bloqué - cliquez quelque part sur la page puis testez à nouveau');
+                    
+                    // Ajouter un gestionnaire de clic temporaire
+                    const enableAudio = () => {
+                        audio.play();
+                        document.removeEventListener('click', enableAudio);
+                    };
+                    document.addEventListener('click', enableAudio);
+                }
+            });
+        
+        console.log(`=== FIN playRemoteStream pour ${userId} ===`);
         return audio;
     }, []);
+    
+    // Fonction pour vérifier l'état complet des connexions
+    const debugConnections = () => {
+        console.log('=== DEBUG CONNEXIONS ===');
+        console.log('Utilisateur actuel:', currentUser?.id);
+        console.log('Participants:', participants.map(p => p.id));
+        console.log('Peers connectés:', Object.keys(peersRef.current));
+        console.log('Streams distants:', Object.keys(remoteStreams));
+        console.log('Mode sourdine:', isDeafened);
+        console.log('Microphone muet:', isMuted);
+        
+        if (localStreamRef.current) {
+            console.log('Stream local:');
+            localStreamRef.current.getAudioTracks().forEach((track, i) => {
+                console.log(`  Piste ${i}:`, {
+                    enabled: track.enabled,
+                    readyState: track.readyState,
+                    muted: track.muted
+                });
+            });
+        }
+        
+        // Vérifier chaque élément audio dans le DOM
+        participants.forEach(p => {
+            if (p.id !== currentUser?.id) {
+                const audioEl = document.getElementById(`audio-${p.id}`);
+                if (audioEl) {
+                    console.log(`Audio element pour ${p.id}:`, {
+                        srcObject: !!audioEl.srcObject,
+                        volume: audioEl.volume,
+                        muted: audioEl.muted,
+                        paused: audioEl.paused,
+                        readyState: audioEl.readyState
+                    });
+                } else {
+                    console.log(`Pas d'élément audio pour ${p.id}`);
+                }
+            }
+        });
+        console.log('=== FIN DEBUG ===');
+    };
 
     // Créer une connexion peer WebRTC
     const createPeerConnection = useCallback((userId, initiator = false) => {
@@ -349,18 +443,27 @@ const SpaceDetailPage = () => {
         }
     }, [currentUser, createPeerConnection]);
 
-    // Basculer le mute
+    // Version améliorée du toggleMute avec plus de logs
     const toggleMute = useCallback(() => {
         if (localStreamRef.current) {
             const audioTracks = localStreamRef.current.getAudioTracks();
             const newMuteState = !isMuted;
             
-            audioTracks.forEach(track => {
-                track.enabled = !newMuteState; // true = non muté, false = muté
+            console.log(`=== TOGGLE MUTE ===`);
+            console.log('Ancien état muet:', isMuted);
+            console.log('Nouvel état muet:', newMuteState);
+            console.log('Nombre de pistes:', audioTracks.length);
+            
+            audioTracks.forEach((track, index) => {
+                console.log(`Avant - Piste ${index}:`, track.enabled);
+                track.enabled = !newMuteState;
+                console.log(`Après - Piste ${index}:`, track.enabled);
             });
             
-            console.log(`Microphone ${newMuteState ? 'muté' : 'démuté'}`);
             setIsMuted(newMuteState);
+            console.log(`Microphone ${newMuteState ? 'MUTE' : 'DEMUTE'}`);
+        } else {
+            console.error('Pas de stream local pour toggle mute!');
         }
     }, [isMuted]);
 
@@ -446,6 +549,19 @@ const SpaceDetailPage = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, []);
 
+    // Exposer les fonctions de debug globalement
+    useEffect(() => {
+        if (typeof window !== 'undefined') {
+            window.debugConnections = debugConnections;
+        }
+        
+        return () => {
+            if (typeof window !== 'undefined') {
+                delete window.debugConnections;
+            }
+        };
+    }, []);
+    
     // Effets
     useEffect(() => {
         if (spaceId) {
