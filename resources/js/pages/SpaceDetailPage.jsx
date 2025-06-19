@@ -186,25 +186,70 @@ const SpaceDetailPage = () => {
         }
     }, [spaceId, currentUser]);
 
+    // Jouer un stream distant - défini avant createPeerConnection pour éviter les références circulaires
+    const playRemoteStream = useCallback((stream, userId) => {
+        // Vérifier si un élément audio existe déjà pour cet utilisateur
+        let audio = document.getElementById(`audio-${userId}`);
+        
+        // Si non, créer un nouvel élément audio
+        if (!audio) {
+            audio = document.createElement('audio');
+            audio.id = `audio-${userId}`;
+            audio.autoplay = true;
+            audio.playsInline = true;
+            audio.controls = false; // Masquer les contrôles
+            document.body.appendChild(audio); // Ajouter au DOM pour que le son fonctionne
+        }
+        
+        // Assigner le stream et jouer
+        audio.srcObject = stream;
+        audio.volume = 1.0;
+        
+        console.log(`Lecture audio de l'utilisateur ${userId} configurée`);
+        
+        audio.play().catch(err => {
+            console.error('Erreur lecture audio:', err);
+        });
+        
+        // Retourner l'élément audio pour pouvoir le nettoyer plus tard
+        return audio;
+    }, []);
+
     // Créer une connexion peer WebRTC
     const createPeerConnection = useCallback((userId, initiator = false) => {
-        if (!localStreamRef.current || peersRef.current[userId]) return;
+        if (!localStreamRef.current) {
+            console.error('Pas de stream local disponible');
+            return;
+        }
+        
+        // Si une connexion existe déjà, la détruire pour en créer une nouvelle
+        if (peersRef.current[userId]) {
+            console.log('Connexion existante trouvée, recréation...');
+            peersRef.current[userId].destroy();
+            delete peersRef.current[userId];
+        }
 
         try {
+            console.log(`Création d'une connexion peer avec ${userId}, initiateur: ${initiator}`);
+            
             const peer = new Peer({
                 initiator,
-                trickle: false,
+                trickle: true, // Activer trickle ICE pour une meilleure connectivité
                 stream: localStreamRef.current,
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
-                        { urls: 'stun:stun1.l.google.com:19302' }
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:stun3.l.google.com:19302' },
+                        { urls: 'stun:stun4.l.google.com:19302' }
                     ]
                 }
             });
 
             peer.on('signal', (data) => {
                 // Envoyer le signal via WebSocket
+                console.log(`Envoi signal à ${userId}:`, data.type || 'candidat ICE');
                 spaceService.sendAudioSignal(spaceId, {
                     signal: data,
                     to: userId,
@@ -212,25 +257,43 @@ const SpaceDetailPage = () => {
                 });
             });
 
+            peer.on('connect', () => {
+                console.log(`Connexion établie avec ${userId}`);
+            });
+            
             peer.on('stream', (remoteStream) => {
-                console.log('Stream reçu de:', userId);
+                console.log(`Stream audio reçu de: ${userId}`);
+                
+                // Vérifier que le stream contient des pistes audio
+                const audioTracks = remoteStream.getAudioTracks();
+                console.log(`Nombre de pistes audio: ${audioTracks.length}`);
+                
                 setRemoteStreams(prev => ({
                     ...prev,
                     [userId]: remoteStream
                 }));
                 
-                // Jouer l'audio distant
+                // Jouer l'audio distant si non en sourdine
                 if (!isDeafened) {
                     playRemoteStream(remoteStream, userId);
                 }
             });
 
             peer.on('error', (err) => {
-                console.error('Erreur peer:', err);
+                console.error(`Erreur peer avec ${userId}:`, err);
             });
 
             peer.on('close', () => {
-                console.log('Connexion fermée avec:', userId);
+                console.log(`Connexion fermée avec: ${userId}`);
+                
+                // Supprimer l'élément audio
+                const audioElement = document.getElementById(`audio-${userId}`);
+                if (audioElement) {
+                    audioElement.srcObject = null;
+                    audioElement.remove();
+                }
+                
+                // Nettoyer les références
                 setRemoteStreams(prev => {
                     const newStreams = { ...prev };
                     delete newStreams[userId];
@@ -240,55 +303,95 @@ const SpaceDetailPage = () => {
 
             peersRef.current[userId] = peer;
             setPeers(prev => ({ ...prev, [userId]: peer }));
+            
+            return peer;
 
         } catch (err) {
-            console.error('Erreur création peer:', err);
+            console.error(`Erreur création peer avec ${userId}:`, err);
+            return null;
         }
     }, [spaceId, currentUser, isDeafened]);
 
     // Gérer les signaux WebRTC entrants
     const handleIncomingSignal = useCallback((signal, fromUserId) => {
-        if (!currentUser || fromUserId === currentUser.id) return;
-
+        if (!currentUser || fromUserId === currentUser.id) {
+            console.log('Signal ignoré (même utilisateur)');
+            return;
+        }
+        
+        console.log(`Signal reçu de ${fromUserId}:`, signal.type || 'candidat ICE');
+        
         let peer = peersRef.current[fromUserId];
         
+        // Si on reçoit une offre mais qu'on a déjà une connexion, recréer la connexion
+        if (signal.type === 'offer' && peer) {
+            console.log('Offre reçue pour une connexion existante, recréation...');
+            peer.destroy();
+            delete peersRef.current[fromUserId];
+            peer = null;
+        }
+        
+        // Si pas de peer, créer une nouvelle connexion (non-initiateur car on répond)
         if (!peer) {
-            createPeerConnection(fromUserId, false);
-            peer = peersRef.current[fromUserId];
+            console.log(`Création d'une nouvelle connexion pour répondre à ${fromUserId}`);
+            peer = createPeerConnection(fromUserId, false);
         }
 
         if (peer) {
-            peer.signal(signal);
+            try {
+                console.log(`Application du signal de ${fromUserId}`);
+                peer.signal(signal);
+            } catch (err) {
+                console.error(`Erreur lors de l'application du signal de ${fromUserId}:`, err);
+            }
+        } else {
+            console.error(`Impossible de créer une connexion peer avec ${fromUserId}`);
         }
     }, [currentUser, createPeerConnection]);
-
-    // Jouer un stream distant
-    const playRemoteStream = useCallback((stream, userId) => {
-        const audio = new Audio();
-        audio.srcObject = stream;
-        audio.autoplay = true;
-        audio.volume = 1.0;
-        
-        audio.play().catch(err => {
-            console.error('Erreur lecture audio:', err);
-        });
-    }, []);
 
     // Basculer le mute
     const toggleMute = useCallback(() => {
         if (localStreamRef.current) {
             const audioTracks = localStreamRef.current.getAudioTracks();
+            const newMuteState = !isMuted;
+            
             audioTracks.forEach(track => {
-                track.enabled = isMuted;
+                track.enabled = !newMuteState; // true = non muté, false = muté
             });
-            setIsMuted(!isMuted);
+            
+            console.log(`Microphone ${newMuteState ? 'muté' : 'démuté'}`);
+            setIsMuted(newMuteState);
         }
     }, [isMuted]);
 
     // Basculer le mode sourd
     const toggleDeafen = useCallback(() => {
-        setIsDeafened(!isDeafened);
-    }, [isDeafened]);
+        const newDeafenState = !isDeafened;
+        setIsDeafened(newDeafenState);
+        
+        console.log(`Mode sourdine ${newDeafenState ? 'activé' : 'désactivé'}`);
+        
+        // Mettre à jour tous les éléments audio
+        Object.keys(remoteStreams).forEach(userId => {
+            const audioElement = document.getElementById(`audio-${userId}`);
+            if (audioElement) {
+                if (newDeafenState) {
+                    // Désactiver l'audio
+                    audioElement.volume = 0;
+                    audioElement.muted = true;
+                } else {
+                    // Réactiver l'audio
+                    audioElement.volume = 1.0;
+                    audioElement.muted = false;
+                    
+                    // Rejouer le stream si nécessaire
+                    if (remoteStreams[userId]) {
+                        playRemoteStream(remoteStreams[userId], userId);
+                    }
+                }
+            }
+        });
+    }, [isDeafened, remoteStreams, playRemoteStream]);
 
     // Envoyer un message
     const sendMessage = useCallback(async (e) => {
