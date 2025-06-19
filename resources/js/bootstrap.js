@@ -22,7 +22,7 @@ window.Pusher = Pusher;
 const isUserAuthenticated = () => {
     // Vérifier si un token d'authentification est présent dans localStorage
     // ou si une session utilisateur est active (cookie)
-    return !!localStorage.getItem('auth_token') || 
+    return !!localStorage.getItem('authToken') || 
            document.cookie.includes('laravel_session=') || 
            document.cookie.includes('XSRF-TOKEN=');
 };
@@ -45,7 +45,7 @@ if (isUserAuthenticated()) {
             headers: {
                 Accept: 'application/json',
                 'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content'),
-                'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+                'Authorization': `Bearer ${localStorage.getItem('authToken')}`
             }
         }
     });

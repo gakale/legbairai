@@ -11,7 +11,7 @@ import CreateSpaceModal from '../components/spaces/CreateSpaceModal';
 const defaultAvatar = "https://ui-avatars.com/api/?background=random&color=fff&size=128&name=";
 
 const UserProfilePage = () => {
-    const { userId } = useParams(); // Récupère l'ID de l'utilisateur depuis l'URL
+    const { username } = useParams(); // Récupère le nom d'utilisateur depuis l'URL
     const { currentUser, isAuthenticated } = useAuth(); // Utilisateur actuellement connecté
     const navigate = useNavigate();
 
@@ -35,7 +35,7 @@ const UserProfilePage = () => {
         setIsLoading(true);
         setError('');
         try {
-            const response = await UserService.getUserProfile(userId);
+            const response = await UserService.getUserProfile(username);
             setProfileUser(response.data.data); // Supposant que UserResource enveloppe dans 'data'
             // La propriété 'is_followed_by_current_user' devrait venir de l'API
             setIsFollowing(response.data.data.is_followed_by_current_user || false);
@@ -49,17 +49,17 @@ const UserProfilePage = () => {
             }
         }
         setIsLoading(false);
-    }, [userId, navigate]);
+    }, [username, navigate]);
     
     // Fonction pour charger les espaces créés par l'utilisateur
     const fetchUserSpaces = useCallback(async (page = 1) => {
-        if (!userId) return;
+        if (!username) return;
         
         setSpacesLoading(true);
         setSpacesError('');
         
         try {
-            const response = await getSpacesByUser(userId, page);
+            const response = await getSpacesByUser(username, page);
             const { data, meta } = response.data;
             
             if (page === 1) {
@@ -76,14 +76,14 @@ const UserProfilePage = () => {
         }
         
         setSpacesLoading(false);
-    }, [userId]);
+    }, [username]);
 
     useEffect(() => {
-        if (userId) {
+        if (username) {
             fetchProfile();
             fetchUserSpaces(1);
         }
-    }, [userId, fetchProfile, fetchUserSpaces]);
+    }, [username, fetchProfile, fetchUserSpaces]);
 
     const handleFollowToggle = async () => {
         if (!isAuthenticated || !currentUser) {
@@ -95,12 +95,12 @@ const UserProfilePage = () => {
         setFollowInProgress(true);
         try {
             if (isFollowing) {
-                await UserService.unfollowUser(userId);
+                await UserService.unfollowUser(profileUser.id);
                 setIsFollowing(false);
                 // Mettre à jour le compteur de followers localement (optimistic update ou refetch)
                 setProfileUser(prev => ({ ...prev, followers_count: Math.max(0, (prev.followers_count || 1) - 1) }));
             } else {
-                await UserService.followUser(userId);
+                await UserService.followUser(profileUser.id);
                 setIsFollowing(true);
                 setProfileUser(prev => ({ ...prev, followers_count: (prev.followers_count || 0) + 1 }));
             }
