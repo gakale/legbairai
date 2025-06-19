@@ -5,6 +5,7 @@ import { useAuth } from '../contexts/AuthContext';
 // Pages
 import HomePage from '../pages/HomePage';
 import CreateSpacePage from '../pages/CreateSpacePage'; // Import the new page
+import LoginPage from '../pages/LoginPage'; // Import login page
 // Importez d'autres pages ici au fur et à mesure que vous les créez
 
 // Layout et composants communs
@@ -34,6 +35,7 @@ const AppRoutes = () => {
       <Routes>
         {/* Routes publiques */}
         <Route path="/" element={<HomePage />} />
+        <Route path="/login" element={<LoginPage />} />
         
         {/* Routes qui nécessitent une authentification */}
         <Route 
