@@ -3,6 +3,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App'; // Importe le composant racine depuis App.jsx
 import '../css/app.css';
+import '../css/spaces.css'; // Import des styles pour les espaces audio
 import { AuthProvider } from './contexts/AuthContext'; // Importer
 
 const rootElement = document.getElementById('app');

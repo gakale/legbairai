@@ -1,0 +1,369 @@
+/* resources/css/spaces.css */
+
+/* Variables CSS pour la cohérence des couleurs */
+:root {
+  --gb-dark: #1a1a1a;
+  --gb-dark-light: #2a2a2a;
+  --gb-gray-dark: #3a3a3a;
+  --gb-gray: #9ca3af;
+  --gb-light-gray: #d1d5db;
+  --gb-white: #ffffff;
+  --gb-purple: #8b5cf6;
+  --gb-purple-dark: #7c3aed;
+  --gb-purple-light: #a78bfa;
+}
+
+/* Styles pour les cartes de spaces */
+.space-card {
+  background: var(--gb-dark-light);
+  border: 1px solid var(--gb-gray-dark);
+  border-radius: 0.5rem;
+  transition: all 0.2s ease-in-out;
+}
+
+.space-card:hover {
+  border-color: var(--gb-purple);
+  transform: translateY(-2px);
+  box-shadow: 0 10px 25px rgba(139, 92, 246, 0.1);
+}
+
+/* Animations pour les statuts live */
+.live-indicator {
+  position: relative;
+}
+
+.live-indicator::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: -8px;
+  width: 8px;
+  height: 8px;
+  background: #ef4444;
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+  transform: translateY(-50%);
+}
+
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+    transform: translateY(-50%) scale(1);
+  }
+  50% {
+    opacity: 0.5;
+    transform: translateY(-50%) scale(1.1);
+  }
+}
+
+/* Styles pour la modal de création */
+.create-space-modal {
+  backdrop-filter: blur(10px);
+  background: rgba(0, 0, 0, 0.8);
+}
+
+.create-space-modal .modal-content {
+  background: var(--gb-dark-light);
+  border: 1px solid var(--gb-gray-dark);
+  border-radius: 0.75rem;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+}
+
+/* Styles pour les boutons WebRTC */
+.webrtc-button {
+  background: linear-gradient(135deg, var(--gb-purple), var(--gb-purple-dark));
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  padding: 0.5rem 1rem;
+  font-weight: 600;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.webrtc-button:hover {
+  background: linear-gradient(135deg, var(--gb-purple-dark), var(--gb-purple));
+  transform: translateY(-1px);
+  box-shadow: 0 5px 15px rgba(139, 92, 246, 0.3);
+}
+
+.webrtc-button:active {
+  transform: translateY(0);
+}
+
+/* Indicateur de connexion WebRTC */
+.webrtc-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.webrtc-status.connected {
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.webrtc-status.connecting {
+  background: rgba(251, 191, 36, 0.1);
+  color: #fbbf24;
+  border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.webrtc-status.disconnected {
+  background: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+
+/* Styles pour les avatars de participants */
+.participant-avatar {
+  position: relative;
+  border-radius: 50%;
+  border: 2px solid var(--gb-gray-dark);
+  transition: border-color 0.2s ease;
+}
+
+.participant-avatar.speaking {
+  border-color: var(--gb-purple);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.3);
+  animation: speaking 1s ease-in-out infinite alternate;
+}
+
+@keyframes speaking {
+  from {
+    box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.3);
+  }
+  to {
+    box-shadow: 0 0 0 6px rgba(139, 92, 246, 0.1);
+  }
+}
+
+/* Styles pour les messages de chat */
+.chat-message {
+  background: var(--gb-dark);
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  margin-bottom: 0.5rem;
+  border-left: 3px solid transparent;
+  transition: border-color 0.2s ease;
+}
+
+.chat-message.pinned {
+  border-left-color: var(--gb-purple);
+  background: rgba(139, 92, 246, 0.05);
+}
+
+.chat-message:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Styles pour les contrôles audio */
+.audio-controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: var(--gb-dark-light);
+  border-radius: 0.75rem;
+  border: 1px solid var(--gb-gray-dark);
+}
+
+.mic-button {
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.mic-button.muted {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+}
+
+.mic-button.unmuted {
+  background: rgba(34, 197, 94, 0.2);
+  color: #22c55e;
+}
+
+.mic-button:hover {
+  transform: scale(1.05);
+}
+
+/* Styles pour les badges de statut */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  border-radius: 9999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.status-badge.live {
+  background: #dc2626;
+  color: white;
+}
+
+.status-badge.scheduled {
+  background: #2563eb;
+  color: white;
+}
+
+.status-badge.ended {
+  background: #6b7280;
+  color: white;
+}
+
+/* Styles pour les types de spaces */
+.space-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.space-type.public {
+  color: #22c55e;
+}
+
+.space-type.paid {
+  color: #f59e0b;
+}
+
+.space-type.private {
+  color: var(--gb-purple);
+}
+
+/* Utilitaires pour tronquer le texte */
+.line-clamp-1 {
+  display: -webkit-box;
+  -webkit-line-clamp: 1;
+  line-clamp: 1;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.line-clamp-3 {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Animations d'entrée pour les éléments */
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Styles responsive */
+@media (max-width: 768px) {
+  .space-card {
+    margin-bottom: 1rem;
+  }
+  
+  .audio-controls {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .mic-button {
+    width: 50px;
+    height: 50px;
+    font-size: 1.25rem;
+  }
+  
+  .create-space-modal .modal-content {
+    margin: 1rem;
+    max-height: calc(100vh - 2rem);
+  }
+}
+
+/* Styles pour les focus et accessibilité */
+.focus-visible:focus {
+  outline: 2px solid var(--gb-purple);
+  outline-offset: 2px;
+}
+
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid var(--gb-purple);
+  outline-offset: 2px;
+}
+
+/* Amélioration de la lisibilité */
+.text-contrast-high {
+  color: var(--gb-white);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Styles pour les loaders */
+.spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  border-top-color: var(--gb-purple);
+  animation: spin 1s ease-in-out infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

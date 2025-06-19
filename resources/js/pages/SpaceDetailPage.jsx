@@ -1,15 +1,9 @@
-// resources/js/pages/SpaceDetailPage.jsx
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import SpaceService, { joinSpace } from '../services/spaceService'; // Correction de la casse
+import spaceService from '../services/spaceService';
 import Button from '../components/common/Button';
-import Peer from 'simple-peer'; // WebRTC library
-
-// Importer les composants pour le chat, la liste des participants, etc. (nous les créerons/améliorerons)
-// import ParticipantList from '../components/spaces/ParticipantList';
-// import ChatWindow from '../components/spaces/ChatWindow';
-// import SpaceControls from '../components/spaces/SpaceControls';
+import Peer from 'simple-peer';
 
 const defaultAvatar = "https://ui-avatars.com/api/?background=6B46C1&color=fff&size=128&name=";
 
@@ -18,709 +12,630 @@ const SpaceDetailPage = () => {
     const { currentUser, isAuthenticated } = useAuth();
     const navigate = useNavigate();
     
-    // Définir currentUserId à partir de currentUser
-    const currentUserId = currentUser ? currentUser.id : null;
-
+    // États principaux
     const [space, setSpace] = useState(null);
-    const [participants, setParticipants] = useState([]); // Géré par Presence Channel
+    const [participants, setParticipants] = useState([]);
     const [messages, setMessages] = useState([]);
-    const [pinnedMessage, setPinnedMessage] = useState(null); // Si on le gère séparément
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState('');
-    const [connectionStatus, setConnectionStatus] = useState('Déconnecté');
     const [newMessageContent, setNewMessageContent] = useState('');
-    const [isJoining, setIsJoining] = useState(false); // New state for join button
+    const [isJoining, setIsJoining] = useState(false);
+    const [hasJoined, setHasJoined] = useState(false);
+    const [connectionStatus, setConnectionStatus] = useState('Déconnecté');
 
-    // WebRTC State
+    // États WebRTC
     const [localStream, setLocalStream] = useState(null);
     const [peers, setPeers] = useState({});
-    const peersRef = useRef({});
     const [remoteStreams, setRemoteStreams] = useState({});
-    const remoteStreamsRef = useRef({});
-    const [isMuted, setIsMuted] = useState(true); // Start muted by default
-    const [speakingParticipants, setSpeakingParticipants] = useState({}); // {[participantId]: boolean}
+    const [isMuted, setIsMuted] = useState(true);
+    const [isDeafened, setIsDeafened] = useState(false);
+    const [speakingParticipants, setSpeakingParticipants] = useState({});
 
-    // Refs for Web Audio API parts
-    const audioContextRef = useRef(null); // Single AudioContext for all analysers
-    const remoteAnalysersRef = useRef({}); // Stores { [streamOwnerId]: { analyser, sourceNode, animationFrameId, dataArray } }
-                                        // streamOwnerId can be currentUserId for local stream
+    // Refs
+    const peersRef = useRef({});
+    const localStreamRef = useRef(null);
+    const messagesEndRef = useRef(null);
+    const echoChannelRef = useRef(null);
 
-
-    // Références pour les callbacks Echo afin d'éviter des dépendances excessives dans useEffect
-    const messagesRef = useRef(messages);
-    const participantsRef = useRef(participants);
-    const pinnedMessageRef = useRef(pinnedMessage);
-    // No need for localStreamRef if setLocalStream is used correctly in its own effects or callbacks
-
-    useEffect(() => {
-        messagesRef.current = messages;
-    }, [messages]);
-
-    useEffect(() => {
-        participantsRef.current = participants;
-    }, [participants]);
-
-    useEffect(() => {
-        pinnedMessageRef.current = pinnedMessage;
-    }, [pinnedMessage]);
-
-    useEffect(() => {
-        peersRef.current = peers;
-    }, [peers]);
-
-    useEffect(() => {
-        remoteStreamsRef.current = remoteStreams;
-    }, [remoteStreams]);
-
-
-    const fetchInitialData = useCallback(async () => {
-        setIsLoading(true);
-        setError('');
+    // Charger les détails du space
+    const fetchSpaceDetails = useCallback(async () => {
         try {
-            const spaceDetailsResponse = await SpaceService.getSpaceDetails(spaceId);
-            setSpace(spaceDetailsResponse.data.data); // Supposant UserResource enveloppe dans 'data'
-
-            const messagesResponse = await SpaceService.getSpaceMessages(spaceId, 1); // Charger la première page de messages
-            setMessages(messagesResponse.data.slice().reverse()); // Inverser pour afficher les plus anciens en premier
-                                                                // ou gérer l'ordre dans le rendu
-
-            // Trouver un message épinglé parmi les messages chargés (si la logique est là)
-            // const foundPinned = messagesResponse.data.find(m => m.is_pinned);
-            // if (foundPinned) setPinnedMessage(foundPinned);
-
+            setIsLoading(true);
+            const response = await spaceService.getById(spaceId);
+            const spaceData = response.data || response;
+            setSpace(spaceData);
+            
+            // Charger les messages
+            await loadMessages();
         } catch (err) {
-            console.error("Erreur chargement données du Space:", err);
-            setError(err.response?.data?.message || "Impossible de charger les détails du Space.");
-            if (err.response?.status === 404) setError("Space non trouvé.");
+            console.error('Erreur chargement space:', err);
+            setError('Space non trouvé ou inaccessible');
+        } finally {
+            setIsLoading(false);
         }
-        setIsLoading(false);
     }, [spaceId]);
 
-    useEffect(() => {
-        fetchInitialData();
-
-        // Mode de développement: si nous sommes en environnement local, nous simulons les événements
-        // de présence pour faciliter le développement sans dépendre de l'authentification WebSocket
-        const isDevelopment = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
-        
-        // Ne pas initialiser la connexion WebSocket pour les utilisateurs non authentifiés
-        if (!isAuthenticated || !currentUserId) {
-            console.log("Utilisateur non authentifié ou ID manquant, Echo non initialisé pour le canal de présence.");
-            setConnectionStatus("Mode lecture seule (non connecté)");
-            
-            // En mode développement, simuler les participants pour les utilisateurs non connectés
-            if (isDevelopment) {
-                console.log("Mode développement: simulation des participants pour utilisateur non connecté");
-                setTimeout(() => {
-                    if (space && space.participants) {
-                        setParticipants(space.participants);
-                    }
-                }, 1000);
-            }
-            return; // Sortir de l'effet pour éviter d'initialiser Echo
-        }
-
-        // Vérifier si Echo est disponible
-        if (!window.Echo) {
-            console.error("Echo n'est pas initialisé !");
-            setConnectionStatus("Erreur Echo");
-            return;
-        }
-
-        console.log(`Tentative de connexion au canal de présence : space.${spaceId}`);
-        setConnectionStatus('Connexion...');
-        
-        let presenceChannel;
-        
+    // Charger les messages
+    const loadMessages = useCallback(async () => {
         try {
-            presenceChannel = window.Echo.join(`space.${spaceId}`);
-        } catch (error) {
-            console.error('Erreur lors de la connexion au canal de présence:', error);
-            setConnectionStatus('Erreur de connexion WebSocket');
-            
-            // En mode développement, nous continuons malgré l'erreur
-            if (isDevelopment && space && space.participants) {
-                console.warn('Mode développement: simulation des participants');
-                setTimeout(() => setParticipants(space.participants), 500);
-            }
-            return; // Sortir de la fonction si la connexion échoue
+            const response = await spaceService.getMessages(spaceId);
+            setMessages(response.data || []);
+        } catch (err) {
+            console.error('Erreur chargement messages:', err);
         }
-        
-        presenceChannel
-            .on('pusher:subscription_succeeded', () => {
-                setConnectionStatus(`Connecté au canal space.${spaceId}`);
-                console.log('Connexion WebSocket réussie!');
-            })
-            .on('pusher:subscription_error', (status) => {
-                setConnectionStatus(`Échec connexion canal (code: ${status}). Vérifiez l'auth et les logs.`);
-                console.error(`Erreur abonnement PRÉSENCE canal space.${spaceId}:`, status);
-                
-                // En mode développement, nous continuons malgré l'erreur
-                if (isDevelopment) {
-                    console.warn('Mode développement: simulation des événements de présence');
-                    // Simuler les participants déjà récupérés par l'API
-                    setTimeout(() => {
-                        if (space && space.participants) {
-                            setParticipants(space.participants);
-                        }
-                    }, 500);
-                }
-            })
-            .here((users) => {
-                console.log('Membres présents:', users);
-                setParticipants(users);
-            })
-            .joining((user) => {
-                console.log('Nouveau membre:', user);
-                setParticipants(prev => {
-                    if (!prev.find(p => p.id === user.id)) return [...prev, user];
-                    return prev;
-                });
-            })
-            .leaving((user) => {
-                console.log('Membre parti:', user);
-                setParticipants(prev => prev.filter(p => p.id !== user.id));
-            })
-            .listen('.message.new', (eventData) => {
-                console.log('Nouveau message reçu:', eventData);
-                setMessages(prev => [...prev, eventData.message]);
-                // Auto-scroll vers le bas du chat ici
-            })
-            .listen('.participant.hand_status', (eventData) => {
-                setParticipants(prev =>
-                    prev.map(p => p.id === eventData.user_id ? { ...p, has_raised_hand: eventData.has_raised_hand } : p)
-                );
-            })
-            .listen('.participant.role_changed', (eventData) => {
-                setParticipants(prev =>
-                    prev.map(p => p.id === eventData.participant.user.id ? { ...p, ...eventData.participant.user, role: eventData.participant.role, role_label: eventData.participant.role_label } : p)
-                );
-                 // Mettre à jour les infos complètes du participant, y compris le rôle et le nom d'utilisateur au cas où
-                 setParticipants(prev => prev.map(p => {
-                    if (p.id === eventData.participant.user.id) {
-                        return {
-                            ...p, // Garder les autres infos de présence
-                            role: eventData.participant.role, // Nouveau rôle depuis l'événement
-                            role_label: eventData.participant.role_label,
-                            // Mettre à jour d'autres champs si nécessaire, ex: username si l'événement le fournit
-                            username: eventData.participant.user.username || p.username,
-                        };
-                    }
-                    return p;
-                }));
-            })
-            .listen('.message.pinned_status_changed', (eventData) => {
-                const updatedMsg = eventData.message;
-                setMessages(prevMsgs =>
-                    prevMsgs.map(msg =>
-                        msg.id === updatedMsg.id
-                            ? { ...msg, is_pinned: updatedMsg.is_pinned }
-                            : { ...msg, is_pinned: false } // Si un seul épinglé
-                    )
-                );
-                if (updatedMsg.is_pinned) setPinnedMessage(updatedMsg);
-                else if (pinnedMessageRef.current && pinnedMessageRef.current.id === updatedMsg.id) setPinnedMessage(null);
-            })
-            .listen('.participant.muted_status_changed', (eventData) => {
-                setParticipants(prev =>
-                    prev.map(p => p.id === eventData.user_id ? { ...p, is_muted_by_host: eventData.is_muted_by_host } : p)
-                );
-            })
-            // New listener for our audio signals
-            .listen('.audio.signal', (eventData) => {
-                const { user_id: signalUserId, signal } = eventData;
-                // console.log('Received signal from Echo:', signalUserId, signal, 'Current peers:', peersRef.current);
-                const peer = peersRef.current[signalUserId];
+    }, [spaceId]);
 
-                if (signalUserId === currentUserId) {
-                    // console.log("Ignoring signal from self");
-                    return;
-                }
-
-                if (peer) {
-                    if (signal.renegotiate || signal.transceiverRequest) {
-                       // console.log('Ignoring renegotiate or transceiverRequest signal from simple-peer');
-                    } else if (peer.destroyed && (signal.type === 'offer' || signal.type === 'answer')) {
-                       // console.warn(`Received signal for already destroyed peer: ${signalUserId}. Attempting to recreate.`);
-                        // Potentially recreate the peer here if necessary. For now, just log.
-                    } else if (peer.destroyed) {
-                       // console.warn(`Received signal for already destroyed peer: ${signalUserId}. Ignoring.`);
-                    } else {
-                       // console.log(`Received signal from ${signalUserId}, processing with peer:`, signal);
-                        peer.signal(signal);
-                    }
-                } else {
-                   // console.warn(`Peer not found for user ID: ${signalUserId} when trying to process signal. Signal data:`, signal);
-                    // This can happen if a signal arrives before the peer object is created,
-                    // or if the user sending the signal is not yet in the local participant list,
-                    // or if the peer was destroyed but a late signal arrived.
-                    // If it's an offer, we might want to queue it or create a new peer.
-                    // For now, simple logging.
-                }
-            });
-
-
-        return () => {
-            if (presenceChannel) { // Make sure presenceChannel is defined
-                window.Echo.leave(`space.${spaceId}`);
-            }
-            setConnectionStatus('Déconnecté');
-            // Clean up WebRTC resources
-            if (localStream) {
-                localStream.getTracks().forEach(track => track.stop());
-            }
-            Object.values(peersRef.current).forEach(peer => peer.destroy());
-            setPeers({});
-            setLocalStream(null);
-            setRemoteStreams({});
-        };
-    }, [spaceId, fetchInitialData, currentUserId, isAuthenticated, localStream]); // Added localStream
-
-
-    // Unified Speaking Detection Logic for Local and Remote Streams
-    useEffect(() => {
-        const SPEAKING_THRESHOLD = 20; // Example threshold, might need tuning
-        const FFT_SIZE = 512;
-
-        const setupAnalyserForStream = (stream, streamOwnerId) => {
-            if (!audioContextRef.current) {
-                audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
-            }
-            const audioContext = audioContextRef.current;
-
-            // Clean up existing analyser for this streamOwnerId if any
-            if (remoteAnalysersRef.current[streamOwnerId]) {
-                const existing = remoteAnalysersRef.current[streamOwnerId];
-                if (existing.animationFrameId) cancelAnimationFrame(existing.animationFrameId);
-                if (existing.sourceNode) existing.sourceNode.disconnect();
-            }
-
-            const analyser = audioContext.createAnalyser();
-            analyser.fftSize = FFT_SIZE;
-            const sourceNode = audioContext.createMediaStreamSource(stream);
-            sourceNode.connect(analyser);
-            const dataArray = new Uint8Array(analyser.frequencyBinCount);
-
-            let animationFrameId;
-
-            const processAudio = () => {
-                analyser.getByteFrequencyData(dataArray);
-                let sum = 0;
-                for (let i = 0; i < dataArray.length; i++) {
-                    sum += dataArray[i];
-                }
-                const average = sum / dataArray.length;
-                const currentlySpeaking = average > SPEAKING_THRESHOLD;
-
-                setSpeakingParticipants(prev => {
-                    if (Boolean(prev[streamOwnerId]) !== currentlySpeaking) {
-                        return { ...prev, [streamOwnerId]: currentlySpeaking };
-                    }
-                    return prev;
-                });
-                animationFrameId = requestAnimationFrame(processAudio);
-            };
-            processAudio(); // Start the loop
-
-            remoteAnalysersRef.current[streamOwnerId] = { analyser, sourceNode, dataArray, animationFrameId };
-        };
-
-        const cleanupAnalyserForStream = (streamOwnerId) => {
-            const analyserSetup = remoteAnalysersRef.current[streamOwnerId];
-            if (analyserSetup) {
-                if (analyserSetup.animationFrameId) cancelAnimationFrame(analyserSetup.animationFrameId);
-                if (analyserSetup.sourceNode) {
-                    try { analyserSetup.sourceNode.disconnect(); } catch (e) { /* ignore */ }
-                }
-                delete remoteAnalysersRef.current[streamOwnerId];
-                setSpeakingParticipants(prev => {
-                    if (prev[streamOwnerId]) {
-                        const newState = { ...prev };
-                        delete newState[streamOwnerId];
-                        return newState;
-                    }
-                    return prev;
-                });
-            }
-        };
-
-        // Local stream analysis
-        if (localStream && !isMuted && currentUserId) {
-            setupAnalyserForStream(localStream, currentUserId);
-        } else if (currentUserId) { // Cleanup if local stream removed or muted
-            cleanupAnalyserForStream(currentUserId);
-        }
-
-        // Remote streams analysis
-        Object.entries(remoteStreams).forEach(([peerId, stream]) => {
-            if (stream && stream.active) { // Check if stream is valid and active
-                 // Ensure peerId is treated consistently (e.g. as string if keys are strings)
-                const id = String(peerId);
-                // Check if analyser already exists and if the stream object is the same
-                // This is tricky because MediaStream objects might be replaced.
-                // For simplicity, if a stream exists for peerId, we ensure an analyser is running.
-                // If an old analyser for a non-existent stream is found later, it will be cleaned up.
-                if (!remoteAnalysersRef.current[id] || remoteAnalysersRef.current[id].sourceNode.mediaStream !== stream) {
-                     setupAnalyserForStream(stream, id);
-                }
-            }
-        });
-
-        // Cleanup stale remote analysers (for peers who left)
-        const currentRemoteStreamKeys = new Set(Object.keys(remoteStreams).map(String));
-        Object.keys(remoteAnalysersRef.current).forEach(streamOwnerId => {
-            if (String(streamOwnerId) !== String(currentUserId) && !currentRemoteStreamKeys.has(String(streamOwnerId))) {
-                cleanupAnalyserForStream(streamOwnerId);
-            }
-        });
-
-        return () => {
-            // This cleanup runs when the component unmounts or dependencies change significantly
-            // For a full cleanup on unmount, iterate all in remoteAnalysersRef
-            Object.keys(remoteAnalysersRef.current).forEach(streamOwnerId => {
-                cleanupAnalyserForStream(streamOwnerId);
-            });
-            // The main Echo useEffect handles closing the audioContextRef.current when the component unmounts
-            // or localStream is permanently stopped. If not, it can be closed here too:
-            // if (audioContextRef.current && Object.keys(remoteAnalysersRef.current).length === 0) {
-            //   audioContextRef.current.close().catch(e => console.warn("Error closing audio context:", e));
-            //   audioContextRef.current = null;
-            // }
-        };
-    }, [localStream, remoteStreams, isMuted, currentUserId]);
-
-    // Optional: Log speaking participants changes for verification
-    useEffect(() => {
-        console.log("Speaking participants:", speakingParticipants);
-    }, [speakingParticipants]);
-
-
-    // WebRTC: Start local audio stream
-    const startLocalAudio = useCallback(async () => {
-        if (localStream) return; // Already started
+    // Initialiser le stream audio local
+    const initializeLocalStream = useCallback(async () => {
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    sampleRate: 44100
+                },
+                video: false
+            });
+            
+            localStreamRef.current = stream;
             setLocalStream(stream);
-            setIsMuted(false); // Unmute when stream is acquired
+            
+            // Démarrer en mode muet
+            stream.getAudioTracks().forEach(track => {
+                track.enabled = false;
+            });
+            
             return stream;
         } catch (err) {
-            console.error("Erreur accès microphone:", err);
-            setError("Impossible d'accéder au microphone. Veuillez vérifier les permissions.");
-            setIsMuted(true); // Stay muted if error
+            console.error('Erreur accès microphone:', err);
+            setError('Impossible d\'accéder au microphone. Vérifiez vos permissions.');
             return null;
         }
-    }, [localStream]);
+    }, []);
 
-    // WebRTC: Stop local audio stream
-    const stopLocalAudio = useCallback(() => {
-        if (localStream) {
-            localStream.getTracks().forEach(track => track.stop());
-            setLocalStream(null);
-            setIsMuted(true); // Mute when stream is stopped
-        }
-    }, [localStream]);
-
-    // WebRTC: Mute/Unmute toggle
-    const handleMuteToggle = useCallback(async () => {
-        if (isMuted) { // User wants to unmute
-            const stream = await startLocalAudio();
-            if (stream) {
-                setIsMuted(false);
-                // Add stream to existing peers
-                Object.values(peersRef.current).forEach(peer => {
-                    if (!peer.destroyed) {
-                        peer.addStream(stream);
-                    }
-                });
-            }
-        } else { // User wants to mute
-            stopLocalAudio(); // This also sets isMuted to true
-            // Remove stream from existing peers
-            Object.values(peersRef.current).forEach(peer => {
-                 if (!peer.destroyed && localStream) { // localStream check is technically redundant due to stopLocalAudio logic
-                    // peer.removeStream(localStream); // This was causing issues with simple-peer renegotiation
-                    // Instead, toggle track enabled status (more robust for temporary mute)
-                    // However, for full stop/start, removing and re-adding is needed.
-                    // Since stopLocalAudio stops tracks and nulls localStream, new peers won't get it.
-                    // Existing peers need to be handled.
-                    // For simplicity, if we stop the local stream, new peers won't have it.
-                    // Existing peers might need renegotiation or track replacement.
-                    // The simplest for now is to destroy peers if local stream is fully stopped,
-                    // or rely on adding/removing tracks if the stream object itself persists.
-                    // Given current start/stop logic, a full stop means peers can't send.
-                    // Let's ensure tracks are disabled.
-                 }
-            });
-             if (localStream) { // Ensure tracks are disabled if stream object still exists momentarily
-                localStream.getAudioTracks().forEach(track => track.enabled = false);
-             }
-             setIsMuted(true); // Explicitly set, though stopLocalAudio does it.
-        }
-    }, [isMuted, startLocalAudio, stopLocalAudio, localStream]);
-
-
-    // WebRTC: Manage Peer Connections based on participants and localStream
-    useEffect(() => {
-        if (!localStream || !isAuthenticated || !currentUserId || space?.status !== 'live') {
-            // If local stream isn't ready, not authenticated, or space not live, destroy existing peers.
-            Object.values(peersRef.current).forEach(peer => peer.destroy());
-            setPeers({});
-            setRemoteStreams({}); // Clear remote streams as well
+    // Rejoindre le space
+    const handleJoinSpace = useCallback(async () => {
+        if (!isAuthenticated) {
+            navigate('/login');
             return;
         }
 
-        const currentPeers = peersRef.current;
-        const activeParticipantIds = new Set(participants.map(p => p.id));
-
-        // Create peers for new participants
-        participants.forEach(participant => {
-            if (participant.id === currentUserId || currentPeers[participant.id]) {
-                return; // Don't create peer for self or if already exists
+        try {
+            setIsJoining(true);
+            
+            // Rejoindre via l'API
+            await spaceService.join(spaceId);
+            
+            // Initialiser le stream audio
+            const stream = await initializeLocalStream();
+            if (!stream) return;
+            
+            // Connecter aux WebSockets
+            if (window.Echo) {
+                connectToSpace();
             }
+            
+            setHasJoined(true);
+            setConnectionStatus('Connecté');
+        } catch (err) {
+            console.error('Erreur rejoindre space:', err);
+            setError('Impossible de rejoindre le space');
+        } finally {
+            setIsJoining(false);
+        }
+    }, [isAuthenticated, spaceId, initializeLocalStream, navigate]);
 
-            console.log(`Creating peer for ${participant.id} (current user: ${currentUserId})`);
-            // Determine initiator: simpler to have one side always initiate, e.g., user with lower ID.
-            // This needs to be consistent for any pair of users.
-            const initiator = currentUserId < participant.id;
-            console.log(`Initiator status for peer with ${participant.id}: ${initiator}`);
+    // Connexion WebSocket et WebRTC
+    const connectToSpace = useCallback(() => {
+        if (!window.Echo || !spaceId) return;
 
-            const newPeer = new Peer({
-                initiator: initiator,
-                trickle: true,
-                stream: localStream, // Add local stream immediately
-            });
+        try {
+            // Se connecter au canal de présence
+            const channel = window.Echo.join(`space.${spaceId}`);
+            echoChannelRef.current = channel;
 
-            newPeer.on('signal', (data) => {
-                // console.log(`Sending signal to ${participant.id}:`, data);
-                SpaceService.sendAudioSignal(spaceId, data) // Pass signal data directly
-                    .catch(err => console.error("Erreur envoi signal:", err));
-            });
-
-            newPeer.on('stream', (remoteStream) => {
-                console.log('Stream reçu de:', participant.id, remoteStream);
-                setRemoteStreams(prev => ({ ...prev, [participant.id]: remoteStream }));
-                // Add a 'username' or other identifier to the stream object if needed for display
-                // remoteStream.username = participant.username;
-            });
-
-            newPeer.on('connect', () => {
-                console.log('CONNECTÉ avec peer:', participant.id);
-            });
-
-            newPeer.on('close', () => {
-                console.log('Peer déconnecté (close):', participant.id);
-                setRemoteStreams(prev => {
-                    const newState = { ...prev };
-                    delete newState[participant.id];
-                    return newState;
+            channel
+                .here((users) => {
+                    console.log('Utilisateurs présents:', users);
+                    setParticipants(users);
+                    setConnectionStatus('Connecté');
+                })
+                .joining((user) => {
+                    console.log('Utilisateur rejoint:', user);
+                    setParticipants(prev => [...prev, user]);
+                    
+                    // Créer une connexion peer pour ce nouvel utilisateur
+                    if (currentUser && user.id !== currentUser.id) {
+                        createPeerConnection(user.id, true);
+                    }
+                })
+                .leaving((user) => {
+                    console.log('Utilisateur parti:', user);
+                    setParticipants(prev => prev.filter(p => p.id !== user.id));
+                    
+                    // Nettoyer la connexion peer
+                    if (peersRef.current[user.id]) {
+                        peersRef.current[user.id].destroy();
+                        delete peersRef.current[user.id];
+                        setPeers(prev => {
+                            const newPeers = { ...prev };
+                            delete newPeers[user.id];
+                            return newPeers;
+                        });
+                    }
+                })
+                .error((error) => {
+                    console.error('Erreur canal:', error);
+                    setConnectionStatus('Erreur de connexion');
                 });
-                setPeers(prev => {
-                    const newState = { ...prev };
-                    delete newState[participant.id];
-                    return newState;
-                });
+
+            // Écouter les nouveaux messages
+            channel.listen('MessageSent', (e) => {
+                setMessages(prev => [...prev, e.message]);
+                scrollToBottom();
             });
 
-            newPeer.on('error', (err) => {
-                console.error('Erreur Peer:', participant.id, err);
-                // Attempt to clean up this specific peer
-                if (currentPeers[participant.id]) {
-                    currentPeers[participant.id].destroy();
+            // Écouter les signaux WebRTC
+            channel.listen('AudioSignal', (e) => {
+                handleIncomingSignal(e.signal, e.from);
+            });
+
+        } catch (err) {
+            console.error('Erreur connexion WebSocket:', err);
+            setConnectionStatus('Erreur de connexion');
+        }
+    }, [spaceId, currentUser]);
+
+    // Créer une connexion peer WebRTC
+    const createPeerConnection = useCallback((userId, initiator = false) => {
+        if (!localStreamRef.current || peersRef.current[userId]) return;
+
+        try {
+            const peer = new Peer({
+                initiator,
+                trickle: false,
+                stream: localStreamRef.current,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' }
+                    ]
                 }
-                 setRemoteStreams(prev => {
-                    const newState = { ...prev };
-                    delete newState[participant.id];
-                    return newState;
-                });
-                setPeers(prev => {
-                    const newState = { ...prev };
-                    delete newState[participant.id];
-                    return newState;
+            });
+
+            peer.on('signal', (data) => {
+                // Envoyer le signal via WebSocket
+                spaceService.sendAudioSignal(spaceId, {
+                    signal: data,
+                    to: userId,
+                    from: currentUser.id
                 });
             });
 
-            setPeers(prev => ({ ...prev, [participant.id]: newPeer }));
-        });
+            peer.on('stream', (remoteStream) => {
+                console.log('Stream reçu de:', userId);
+                setRemoteStreams(prev => ({
+                    ...prev,
+                    [userId]: remoteStream
+                }));
+                
+                // Jouer l'audio distant
+                if (!isDeafened) {
+                    playRemoteStream(remoteStream, userId);
+                }
+            });
 
-        // Remove peers for participants who left
-        Object.keys(currentPeers).forEach(peerId => {
-            // peerId is a string, participant.id is a number. Convert for comparison.
-            if (!activeParticipantIds.has(parseInt(peerId))) {
-                console.log(`Participant ${peerId} a quitté, destruction du peer.`);
-                currentPeers[peerId].destroy();
+            peer.on('error', (err) => {
+                console.error('Erreur peer:', err);
+            });
+
+            peer.on('close', () => {
+                console.log('Connexion fermée avec:', userId);
                 setRemoteStreams(prev => {
-                    const newState = { ...prev };
-                    delete newState[peerId];
-                    return newState;
+                    const newStreams = { ...prev };
+                    delete newStreams[userId];
+                    return newStreams;
                 });
-                setPeers(prev => {
-                    const newState = { ...prev };
-                    delete newState[peerId];
-                    return newState;
-                });
-            }
+            });
+
+            peersRef.current[userId] = peer;
+            setPeers(prev => ({ ...prev, [userId]: peer }));
+
+        } catch (err) {
+            console.error('Erreur création peer:', err);
+        }
+    }, [spaceId, currentUser, isDeafened]);
+
+    // Gérer les signaux WebRTC entrants
+    const handleIncomingSignal = useCallback((signal, fromUserId) => {
+        if (!currentUser || fromUserId === currentUser.id) return;
+
+        let peer = peersRef.current[fromUserId];
+        
+        if (!peer) {
+            createPeerConnection(fromUserId, false);
+            peer = peersRef.current[fromUserId];
+        }
+
+        if (peer) {
+            peer.signal(signal);
+        }
+    }, [currentUser, createPeerConnection]);
+
+    // Jouer un stream distant
+    const playRemoteStream = useCallback((stream, userId) => {
+        const audio = new Audio();
+        audio.srcObject = stream;
+        audio.autoplay = true;
+        audio.volume = 1.0;
+        
+        audio.play().catch(err => {
+            console.error('Erreur lecture audio:', err);
         });
+    }, []);
 
-    }, [participants, localStream, spaceId, currentUserId, isAuthenticated, space?.status]);
+    // Basculer le mute
+    const toggleMute = useCallback(() => {
+        if (localStreamRef.current) {
+            const audioTracks = localStreamRef.current.getAudioTracks();
+            audioTracks.forEach(track => {
+                track.enabled = isMuted;
+            });
+            setIsMuted(!isMuted);
+        }
+    }, [isMuted]);
 
+    // Basculer le mode sourd
+    const toggleDeafen = useCallback(() => {
+        setIsDeafened(!isDeafened);
+    }, [isDeafened]);
 
-    const handleSendMessage = async (e) => {
+    // Envoyer un message
+    const sendMessage = useCallback(async (e) => {
         e.preventDefault();
         if (!newMessageContent.trim()) return;
+
         try {
-            // L'événement WebSocket mettra à jour la liste des messages pour tout le monde
-            await SpaceService.sendMessageInSpace(spaceId, newMessageContent);
+            await spaceService.sendMessage(spaceId, newMessageContent.trim());
             setNewMessageContent('');
-            // On pourrait ajouter le message à l'état local ici pour un "optimistic update",
-            // mais l'événement WebSocket devrait le faire de manière plus fiable.
         } catch (err) {
-            console.error("Erreur envoi message:", err);
-            // Afficher une erreur à l'utilisateur
+            console.error('Erreur envoi message:', err);
         }
-    };
+    }, [spaceId, newMessageContent]);
 
-const handleJoinSpace = async () => {
-  setIsJoining(true);
-  setError(''); // Clear previous errors
-  try {
-    await SpaceService.joinSpace(spaceId);
-    // Le WebSocket event 'joining' devrait gérer l'update de la liste des participants.
-    // console.log("Successfully joined space");
-    // Optionnel: Afficher une notification de succès discrète si nécessaire.
-  } catch (err) {
-    console.error("Erreur pour rejoindre le Space:", err);
-    setError(err.response?.data?.message || "Impossible de rejoindre le Space.");
-  } finally {
-    setIsJoining(false);
-  }
-};
+    // Quitter le space
+    const handleLeaveSpace = useCallback(async () => {
+        try {
+            // Nettoyer les connexions WebRTC
+            Object.values(peersRef.current).forEach(peer => {
+                peer.destroy();
+            });
+            peersRef.current = {};
+            setPeers({});
+            setRemoteStreams({});
 
-    if (isLoading) return <div className="text-center py-20 text-gb-light-gray">Chargement du Space...</div>;
-if (error && !isJoining) return <div className="text-center py-20 text-red-400">{error}</div>; // Ne pas afficher l'erreur de chargement si on tente de join
-    if (!space) return <div className="text-center py-20 text-gb-light-gray">Space non trouvé.</div>;
+            // Arrêter le stream local
+            if (localStreamRef.current) {
+                localStreamRef.current.getTracks().forEach(track => track.stop());
+                localStreamRef.current = null;
+                setLocalStream(null);
+            }
 
-    const isHost = isAuthenticated && currentUser && currentUser.id === space.host?.id;
-const isParticipant = participants.some(p => p.id === currentUser?.id);
-const canJoinSpace = isAuthenticated && currentUser && currentUser.id !== space?.host?.id && !isParticipant && space?.status !== 'ended';
+            // Déconnecter WebSocket
+            if (echoChannelRef.current) {
+                window.Echo.leave(`space.${spaceId}`);
+                echoChannelRef.current = null;
+            }
+
+            // Quitter via l'API
+            await spaceService.leave(spaceId);
+            
+            setHasJoined(false);
+            setConnectionStatus('Déconnecté');
+            navigate('/');
+        } catch (err) {
+            console.error('Erreur quitter space:', err);
+        }
+    }, [spaceId, navigate]);
+
+    // Faire défiler vers le bas
+    const scrollToBottom = useCallback(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, []);
+
+    // Effets
+    useEffect(() => {
+        if (spaceId) {
+            fetchSpaceDetails();
+        }
+
+        return () => {
+            // Nettoyage à la fermeture
+            Object.values(peersRef.current).forEach(peer => {
+                peer.destroy();
+            });
+            if (localStreamRef.current) {
+                localStreamRef.current.getTracks().forEach(track => track.stop());
+            }
+            if (echoChannelRef.current) {
+                window.Echo.leave(`space.${spaceId}`);
+            }
+        };
+    }, [spaceId, fetchSpaceDetails]);
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages, scrollToBottom]);
+
+    // États de chargement et d'erreur
+    if (isLoading) {
+        return (
+            <div className="min-h-screen bg-gb-dark flex items-center justify-center">
+                <div className="text-center">
+                    <div className="spinner mb-4"></div>
+                    <div className="text-gb-white">Chargement du space...</div>
+                </div>
+            </div>
+        );
+    }
+
+    if (error) {
+        return (
+            <div className="min-h-screen bg-gb-dark flex items-center justify-center">
+                <div className="text-center">
+                    <div className="text-red-400 mb-4 text-xl">{error}</div>
+                    <Button onClick={() => navigate('/')} variant="primary">
+                        Retour à l'accueil
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    if (!space) {
+        return (
+            <div className="min-h-screen bg-gb-dark flex items-center justify-center">
+                <div className="text-center">
+                    <div className="text-gb-white mb-4 text-xl">Space non trouvé</div>
+                    <Button onClick={() => navigate('/')} variant="primary">
+                        Retour à l'accueil
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+
+    const isHost = currentUser && space.host && currentUser.id === space.host.id;
+    const canJoin = space.status === 'live' && isAuthenticated && !hasJoined;
+    const isInSpace = hasJoined;
 
     return (
-        <div className="container mx-auto py-10 px-4 min-h-screen">
-            <div className="bg-gb-dark-lighter rounded-card shadow-gb-strong p-6 md:p-8">
-                {/* En-tête du Space */}
-                <div className="mb-6 pb-4 border-b border-[rgba(255,255,255,0.1)]">
-                    <div className="flex justify-between items-start">
-                        <div>
-                            <h1 className="text-3xl md:text-4xl font-bold text-gb-white">{space.title}</h1>
-                            <p className="text-gb-light-gray">Animé par <Link to={`/profile/${space.host?.id}`} className="font-semibold hover:text-gb-primary-light">{space.host?.username}</Link></p>
+        <div className="min-h-screen bg-gb-dark">
+            {/* En-tête du space */}
+            <div className="bg-gb-dark-light border-b border-gb-gray-dark">
+                <div className="max-w-7xl mx-auto px-4 py-6">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center space-x-4">
+                            <Link to="/" className="text-gb-light-gray hover:text-gb-white">
+                                ← Retour
+                            </Link>
+                            <div>
+                                <h1 className="text-2xl font-bold text-gb-white">{space.title}</h1>
+                                <div className="flex items-center space-x-4 mt-2">
+                                    <span className={`px-2 py-1 rounded text-xs font-medium ${
+                                        space.status === 'live' ? 'bg-red-600 text-white' :
+                                        space.status === 'scheduled' ? 'bg-blue-600 text-white' :
+                                        'bg-gray-600 text-white'
+                                    }`}>
+                                        {space.status === 'live' ? '🔴 En direct' :
+                                         space.status === 'scheduled' ? '📅 Programmé' :
+                                         '⏹️ Terminé'}
+                                    </span>
+                                    <span className="text-gb-light-gray text-sm">
+                                        👥 {participants.length} participant{participants.length > 1 ? 's' : ''}
+                                    </span>
+                                    {isInSpace && (
+                                        <span className={`text-xs px-2 py-1 rounded ${
+                                            connectionStatus === 'Connecté' ? 'bg-green-900 text-green-200' :
+                                            connectionStatus === 'Connexion...' ? 'bg-yellow-900 text-yellow-200' :
+                                            'bg-red-900 text-red-200'
+                                        }`}>
+                                            {connectionStatus}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                        <span className={`px-3 py-1 rounded-full text-sm font-semibold ${space.status === 'live' ? 'bg-gb-accent text-gb-white animate-pulse' : 'bg-gb-gray text-gb-white'}`}>
-                            {space.status === 'live' && '● '} {space.status_label}
-                        </span>
+
+                        <div className="flex items-center space-x-3">
+                            {canJoin && (
+                                <Button
+                                    onClick={handleJoinSpace}
+                                    disabled={isJoining}
+                                    variant="primary"
+                                    className="webrtc-button"
+                                >
+                                    {isJoining ? (
+                                        <>
+                                            <div className="spinner"></div>
+                                            <span>Connexion...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <span>🎤</span>
+                                            <span>Rejoindre</span>
+                                        </>
+                                    )}
+                                </Button>
+                            )}
+                            
+                            {isInSpace && (
+                                <Button
+                                    onClick={handleLeaveSpace}
+                                    variant="secondary"
+                                >
+                                    Quitter
+                                </Button>
+                            )}
+                        </div>
                     </div>
-                    {space.description && <p className="text-gb-gray mt-3">{space.description}</p>}
                 </div>
+            </div>
 
-                {/* Join Space Button */}
-                {canJoinSpace && (
-                    <div className="my-4"> {/* Adjusted margin to 'my-4' for spacing */}
-                        <Button
-                            onClick={handleJoinSpace}
-                            disabled={isJoining}
-                            variant="primary"
-                        >
-                            {isJoining ? 'Chargement...' : 'Rejoindre le Space'}
-                        </Button>
-                    </div>
-                )}
-                {error && isJoining && <p className="text-red-400 text-sm mt-2">{error}</p>} {/* Display error specific to joining */}
+            <div className="max-w-7xl mx-auto px-4 py-6">
+                <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+                    {/* Colonne principale */}
+                    <div className="lg:col-span-3">
+                        {/* Description */}
+                        {space.description && (
+                            <div className="bg-gb-dark-light rounded-lg p-6 mb-6">
+                                <h2 className="text-lg font-semibold text-gb-white mb-3">Description</h2>
+                                <p className="text-gb-light-gray">{space.description}</p>
+                            </div>
+                        )}
 
-
-                {/* Message épinglé */}
-                {pinnedMessage && (
-                    <div className="mb-4 p-3 bg-[rgba(255,215,0,0.1)] border border-yellow-500 rounded-md text-sm">
-                        <p className="font-semibold text-yellow-400">📌 Message Épinglé par {pinnedMessage.sender?.username}:</p>
-                        <p className="text-gb-light-gray">{pinnedMessage.content}</p>
-                    </div>
-                )}
-
-                {/* Layout principal : Participants à gauche, Chat à droite */}
-                <div className="flex flex-col md:flex-row gap-6 md:gap-8">
-                    {/* Colonne Participants */}
-                    <div className="w-full md:w-1/3 lg:w-1/4 bg-gb-dark p-4 rounded-lg">
-                        <h3 className="text-xl font-semibold text-gb-white mb-3">Participants ({participants.length})</h3>
-                        <ul className="space-y-3 max-h-[60vh] overflow-y-auto">
-                            {participants.map(p => (
-                                <li key={p.id} className={`flex items-center gap-3 p-2 bg-gb-dark-lighter rounded-md transition-all duration-200 ${
-                                    speakingParticipants[p.id] ? 'ring-2 ring-gb-teal shadow-lg' : ''
-                                }`}>
-                                    <img src={p.avatar_url || `${defaultAvatar}${encodeURIComponent(p.username)}`} alt={p.username} className="w-10 h-10 rounded-full object-cover"/>
-                                    <div>
-                                        <span className="font-medium text-gb-white">{p.username}</span>
-                                        <span className="block text-xs text-gb-gray">{p.role_label || p.role}</span>
+                        {/* Contrôles audio (si dans le space) */}
+                        {isInSpace && localStream && (
+                            <div className="bg-gb-dark-light rounded-lg p-6 mb-6">
+                                <h2 className="text-lg font-semibold text-gb-white mb-4">Contrôles Audio</h2>
+                                <div className="audio-controls">
+                                    <button
+                                        onClick={toggleMute}
+                                        className={`mic-button ${isMuted ? 'muted' : 'unmuted'}`}
+                                        title={isMuted ? 'Activer le micro' : 'Couper le micro'}
+                                    >
+                                        {isMuted ? '🎤' : '🔇'}
+                                    </button>
+                                    
+                                    <button
+                                        onClick={toggleDeafen}
+                                        className={`mic-button ${isDeafened ? 'muted' : 'unmuted'}`}
+                                        title={isDeafened ? 'Activer le son' : 'Couper le son'}
+                                    >
+                                        {isDeafened ? '🔇' : '🔊'}
+                                    </button>
+                                    
+                                    <div className="text-center">
+                                        <div className="text-gb-white font-medium">
+                                            {isMuted ? 'Micro coupé' : 'Micro actif'}
+                                        </div>
+                                        <div className="text-gb-light-gray text-sm">
+                                            {isDeafened ? 'Son coupé' : 'Son actif'}
+                                        </div>
                                     </div>
-                                    {p.has_raised_hand && <span className="ml-auto text-xl" title="Main levée">🖐️</span>}
-                                    {speakingParticipants[p.id] && <span className="ml-auto text-xs text-gb-teal">🎙️</span>}
-                                    {/* TODO: Ajouter indicateur mute distant, actions de modération ici si isHost */}
-                                </li>
-                            ))}
-                        </ul>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Chat */}
+                        <div className="bg-gb-dark-light rounded-lg p-6">
+                            <h2 className="text-lg font-semibold text-gb-white mb-4">Chat</h2>
+                            
+                            {/* Messages */}
+                            <div className="h-64 overflow-y-auto mb-4 space-y-3">
+                                {messages.length === 0 ? (
+                                    <div className="text-center text-gb-light-gray py-8">
+                                        Aucun message pour le moment.
+                                    </div>
+                                ) : (
+                                    messages.map((message) => (
+                                        <div key={message.id} className="chat-message">
+                                            <div className="flex items-start space-x-3">
+                                                <img
+                                                    src={message.user?.avatar || `${defaultAvatar}${encodeURIComponent(message.user?.username || 'User')}`}
+                                                    alt="Avatar"
+                                                    className="w-8 h-8 rounded-full"
+                                                />
+                                                <div className="flex-1">
+                                                    <div className="flex items-center space-x-2">
+                                                        <span className="font-medium text-gb-white">
+                                                            {message.user?.display_name || message.user?.username}
+                                                        </span>
+                                                        <span className="text-xs text-gb-light-gray">
+                                                            {message.created_at_formatted}
+                                                        </span>
+                                                    </div>
+                                                    <p className="text-gb-light-gray mt-1">{message.content}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))
+                                )}
+                                <div ref={messagesEndRef} />
+                            </div>
+
+                            {/* Formulaire de message */}
+                            {isInSpace && (
+                                <form onSubmit={sendMessage} className="flex space-x-2">
+                                    <input
+                                        type="text"
+                                        value={newMessageContent}
+                                        onChange={(e) => setNewMessageContent(e.target.value)}
+                                        placeholder="Tapez votre message..."
+                                        className="flex-1 px-3 py-2 bg-gb-dark border border-gb-gray-dark rounded text-gb-white placeholder-gb-light-gray focus:outline-none focus:border-gb-purple"
+                                    />
+                                    <Button type="submit" variant="primary" size="sm">
+                                        Envoyer
+                                    </Button>
+                                </form>
+                            )}
+                        </div>
                     </div>
 
-                    {/* Colonne Chat */}
-                    <div className="w-full md:w-2/3 lg:w-3/4 flex flex-col">
-                        <div className="flex-grow bg-gb-dark p-4 rounded-lg mb-4 max-h-[60vh] overflow-y-auto flex flex-col-reverse"> {/* flex-col-reverse pour que les nouveaux messages soient en bas et scrollable */}
-                            {/* Les messages seront mappés ici, de bas en haut */}
-                            <div className="space-y-4">
-                                {messages.map(msg => (
-                                    <div key={msg.id} className={`flex ${currentUser?.id === msg.sender?.id ? 'justify-end' : 'justify-start'}`}>
-                                        <div className={`max-w-[70%] p-3 rounded-lg ${currentUser?.id === msg.sender?.id ? 'bg-gb-primary text-gb-white' : 'bg-gb-dark-lighter text-gb-light-gray'}`}>
-                                            {currentUser?.id !== msg.sender?.id && (
-                                                <p className="text-xs font-semibold text-gb-primary-light mb-0.5">{msg.sender?.username}</p>
-                                            )}
-                                            <p className="text-sm whitespace-pre-wrap">{msg.content}</p>
-                                            <p className="text-xs opacity-70 mt-1 text-right">{msg.created_at_formatted}</p>
+                    {/* Sidebar */}
+                    <div className="lg:col-span-1">
+                        {/* Informations sur l'hôte */}
+                        <div className="bg-gb-dark-light rounded-lg p-6 mb-6">
+                            <h3 className="text-lg font-semibold text-gb-white mb-4">Hôte</h3>
+                            <div className="flex items-center space-x-3">
+                                <img
+                                    src={space.host?.avatar || `${defaultAvatar}${encodeURIComponent(space.host?.username || 'Host')}`}
+                                    alt="Avatar hôte"
+                                    className="w-12 h-12 rounded-full"
+                                />
+                                <div>
+                                    <div className="font-medium text-gb-white">
+                                        {space.host?.display_name || space.host?.username}
+                                    </div>
+                                    <div className="text-sm text-gb-light-gray">
+                                        @{space.host?.username}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Liste des participants */}
+                        <div className="bg-gb-dark-light rounded-lg p-6">
+                            <h3 className="text-lg font-semibold text-gb-white mb-4">
+                                Participants ({participants.length})
+                            </h3>
+                            <div className="space-y-3">
+                                {participants.map((participant) => (
+                                    <div key={participant.id} className="flex items-center space-x-3">
+                                        <img
+                                            src={participant.avatar || `${defaultAvatar}${encodeURIComponent(participant.username || 'User')}`}
+                                            alt="Avatar"
+                                            className={`w-8 h-8 rounded-full participant-avatar ${
+                                                speakingParticipants[participant.id] ? 'speaking' : ''
+                                            }`}
+                                        />
+                                        <div className="flex-1">
+                                            <div className="text-sm font-medium text-gb-white">
+                                                {participant.display_name || participant.username}
+                                                {participant.id === currentUser?.id && (
+                                                    <span className="text-xs text-gb-purple ml-1">(Vous)</span>
+                                                )}
+                                                {participant.id === space.host?.id && (
+                                                    <span className="text-xs text-yellow-400 ml-1">👑</span>
+                                                )}
+                                            </div>
                                         </div>
                                     </div>
                                 ))}
                             </div>
                         </div>
-                        {/* Formulaire d'envoi de message */}
-                        {isAuthenticated && space.status === 'live' && (
-                            <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
-                                <input
-                                    type="text"
-                                    value={newMessageContent}
-                                    onChange={(e) => setNewMessageContent(e.target.value)}
-                                    placeholder="Écrivez un message..."
-                                    className="flex-grow px-3 py-2 bg-gb-dark border border-gb-gray rounded-md shadow-sm placeholder-gb-gray focus:outline-none focus:ring-gb-primary focus:border-gb-primary sm:text-sm text-gb-white"
-                                />
-                                <Button type="submit" variant="primary" className="py-2">Envoyer</Button>
-                            </form>
-                        )}
                     </div>
                 </div>
-
-                {/* Audio Elements for WebRTC */}
-                { Object.entries(remoteStreams).map(([peerId, stream]) => (
-                    <audio
-                        key={peerId}
-                        ref={audioEl => { if (audioEl) audioEl.srcObject = stream; }}
-                        autoPlay
-                        playsInline
-                        // controls // For debugging
-                        style={{ display: 'none' }} // Hide audio elements
-                    />
-                ))}
-
-                {/* Mute/Unmute Button */}
-                {isAuthenticated && space?.status === 'live' && (
-                     <div className="mt-4 text-center">
-                        <Button onClick={handleMuteToggle} variant={isMuted ? "secondary" : "danger"} className="px-6 py-3">
-                            {isMuted ? '🎙️ Activer Micro' : '🔇 Couper Micro'}
-                        </Button>
-                    </div>
-                )}
-                 {/* TODO: Ajouter les contrôles du Space (Start/End, lever la main, dons, etc.) */}
             </div>
         </div>
     );
