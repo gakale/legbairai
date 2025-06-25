@@ -31,11 +31,14 @@ const SpaceDetailPage = () => {
     
     // États d'enregistrement
     const [isRecording, setIsRecording] = useState(false);
+    const [recordingDuration, setRecordingDuration] = useState(0);
+    const [recordingTimer, setRecordingTimer] = useState(null);
     const [recorder, setRecorder] = useState(null);
-    const [recordingTime, setRecordingTime] = useState(0);
     const recordingTimerRef = useRef(null);
     const [isDeafened, setIsDeafened] = useState(false);
     const [speakingParticipants, setSpeakingParticipants] = useState({});
+    const [isEchoTesting, setIsEchoTesting] = useState(false);
+    const [isLocalEchoEnabled, setIsLocalEchoEnabled] = useState(false);
 
     // Refs
     const peersRef = useRef({});
@@ -324,10 +327,52 @@ const SpaceDetailPage = () => {
         console.log('=== FIN DEBUG ===');
     };
 
+    const diagnosticConnections = () => {
+        console.log('=== DIAGNOSTIC CONNEXIONS ===');
+        console.log('Utilisateur actuel:', currentUser?.id);
+        console.log('Participants:', participants.map(p => p.id));
+        console.log('Peers connectés:', Object.keys(peersRef.current));
+        console.log('Streams distants:', Object.keys(remoteStreams));
+        console.log('Mode sourdine:', isDeafened);
+        console.log('Microphone muet:', isMuted);
+        
+        if (localStreamRef.current) {
+            console.log('Stream local:');
+            localStreamRef.current.getAudioTracks().forEach((track, i) => {
+                console.log(`  Piste ${i}:`, {
+                    enabled: track.enabled,
+                    readyState: track.readyState,
+                    muted: track.muted
+                });
+            });
+        }
+        
+        // Vérifier chaque élément audio dans le DOM
+        participants.forEach(p => {
+            if (p.id !== currentUser?.id) {
+                const audioEl = document.getElementById(`audio-${p.id}`);
+                if (audioEl) {
+                    console.log(`Audio element pour ${p.id}:`, {
+                        srcObject: !!audioEl.srcObject,
+                        volume: audioEl.volume,
+                        muted: audioEl.muted,
+                        paused: audioEl.paused,
+                        readyState: audioEl.readyState
+                    });
+                } else {
+                    console.log(`Pas d'élément audio pour ${p.id}`);
+                }
+            }
+        });
+        console.log('=== FIN DIAGNOSTIC ===');
+    };
+
     // Créer une connexion peer WebRTC
     const createPeerConnection = useCallback((userId, initiator = false) => {
         if (!localStreamRef.current) {
             console.error('Pas de stream local disponible');
+            console.log('État du stream local:', localStreamRef.current);
+            console.log('État des permissions:', navigator.permissions.query({ name: 'microphone' }));
             return;
         }
         
@@ -343,8 +388,8 @@ const SpaceDetailPage = () => {
             
             const peer = new Peer({
                 initiator,
-                trickle: true, // Activer trickle ICE pour une meilleure connectivité
                 stream: localStreamRef.current,
+                trickle: true, // Activer trickle ICE pour une meilleure connectivité
                 config: {
                     iceServers: [
                         { urls: 'stun:stun.l.google.com:19302' },
@@ -355,7 +400,10 @@ const SpaceDetailPage = () => {
                     ]
                 }
             });
-
+            
+            console.log('Peer créé:', peer);
+            console.log('État du stream local:', localStreamRef.current);
+            
             peer.on('signal', (data) => {
                 // Envoyer le signal via WebSocket
                 console.log(`=== ENVOI SIGNAL ===`);
@@ -372,6 +420,8 @@ const SpaceDetailPage = () => {
 
             peer.on('connect', () => {
                 console.log(`Connexion établie avec ${userId}`);
+                console.log('État de la connexion:', peer._debug._peerConnection.iceConnectionState);
+                console.log('État des streams:', peer._debug._peerConnection.getReceivers());
             });
             
             peer.on('stream', (remoteStream) => {
@@ -390,6 +440,20 @@ const SpaceDetailPage = () => {
                 if (!isDeafened) {
                     playRemoteStream(remoteStream, userId);
                 }
+                
+                // Ajouter des logs supplémentaires pour le débogage
+                console.log(`=== DÉBUT STREAM AUDIO DISTANT POUR ${userId} ===`);
+                console.log(`Pistes audio distantes: ${audioTracks.length}`);
+                audioTracks.forEach((track, index) => {
+                    console.log(`Piste ${index}:`, {
+                        enabled: track.enabled,
+                        readyState: track.readyState,
+                        muted: track.muted,
+                        kind: track.kind,
+                        label: track.label
+                    });
+                });
+                console.log(`=== FIN STREAM AUDIO DISTANT POUR ${userId} ===`);
             });
             
             peer.on('error', (err) => {
@@ -422,7 +486,7 @@ const SpaceDetailPage = () => {
                 
                 // Supprimer également le stream distant et l'élément audio
                 setRemoteStreams(prev => {
-                    const newStreams = {...prev};
+                    const newStreams = { ...prev };
                     delete newStreams[userId];
                     return newStreams;
                 });
@@ -442,9 +506,11 @@ const SpaceDetailPage = () => {
 
         } catch (err) {
             console.error(`Erreur création peer avec ${userId}:`, err);
+            console.log('État du stream local:', localStreamRef.current);
+            console.log('État des permissions:', navigator.permissions.query({ name: 'microphone' }));
             return null;
         }
-    }, [spaceId, currentUser, isDeafened]);
+    }, [spaceId, currentUser]);
 
     // Gérer les signaux WebRTC entrants
     const handleIncomingSignal = useCallback((signal, fromUserId) => {
@@ -682,7 +748,7 @@ const SpaceDetailPage = () => {
                 // Créer un FormData pour l'envoi au serveur
                 const formData = new FormData();
                 formData.append('audio_file', audioFile);
-                formData.append('duration_seconds', parseInt(recordingTime, 10) || 0);
+                formData.append('duration_seconds', parseInt(recordingDuration, 10) || 0);
                 
                 try {
                     // Envoyer l'enregistrement au serveur
@@ -704,7 +770,7 @@ const SpaceDetailPage = () => {
                 
                 // Réinitialiser le timer
                 clearInterval(recordingTimerRef.current);
-                setRecordingTime(0);
+                setRecordingDuration(0);
             };
             
             // Démarrer l'enregistrement
@@ -714,7 +780,7 @@ const SpaceDetailPage = () => {
             
             // Démarrer le timer d'enregistrement
             recordingTimerRef.current = setInterval(() => {
-                setRecordingTime(prev => prev + 1);
+                setRecordingDuration(prev => prev + 1);
             }, 1000);
             
             // Notifier les utilisateurs que l'enregistrement a commencé
@@ -769,10 +835,10 @@ const SpaceDetailPage = () => {
 
     // Formater le temps d'enregistrement (mm:ss)
     const formatRecordingTime = useCallback(() => {
-        const minutes = Math.floor(recordingTime / 60);
-        const seconds = recordingTime % 60;
+        const minutes = Math.floor(recordingDuration / 60);
+        const seconds = recordingDuration % 60;
         return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    }, [recordingTime]);
+    }, [recordingDuration]);
     
     // Quitter le space
     const handleLeaveSpace = useCallback(async () => {
@@ -804,11 +870,13 @@ const SpaceDetailPage = () => {
     useEffect(() => {
         if (typeof window !== 'undefined') {
             window.debugConnections = debugConnections;
+            window.diagnosticConnections = diagnosticConnections;
         }
         
         return () => {
             if (typeof window !== 'undefined') {
                 delete window.debugConnections;
+                delete window.diagnosticConnections;
             }
         };
     }, []);
@@ -836,6 +904,82 @@ const SpaceDetailPage = () => {
     useEffect(() => {
         scrollToBottom();
     }, [messages, scrollToBottom]);
+
+    // Test d'écho pour diagnostiquer les problèmes audio
+    const startEchoTest = useCallback(() => {
+        console.log('=== DÉBUT TEST D\'ÉCHO ===');
+        
+        if (!localStreamRef.current) {
+            console.error('Pas de stream local pour le test d\'écho');
+            return;
+        }
+        
+        // Créer un élément audio pour jouer notre propre voix
+        let echoAudio = document.getElementById('echo-test-audio');
+        
+        if (echoAudio) {
+            echoAudio.remove();
+        }
+        
+        echoAudio = document.createElement('audio');
+        echoAudio.id = 'echo-test-audio';
+        echoAudio.autoplay = true;
+        echoAudio.playsInline = true;
+        echoAudio.controls = true;
+        echoAudio.volume = 0.8; // Volume réduit pour éviter le feedback
+        echoAudio.style.display = 'block';
+        echoAudio.style.margin = '10px';
+        
+        // Ajouter des listeners pour le débogage
+        echoAudio.addEventListener('playing', () => {
+            console.log('✅ TEST D\'ÉCHO: Vous devriez maintenant vous entendre!');
+        });
+        echoAudio.addEventListener('error', (e) => {
+            console.error('❌ TEST D\'ÉCHO: Erreur:', e);
+        });
+        
+        // Assigner le stream local à l'élément audio
+        echoAudio.srcObject = localStreamRef.current;
+        
+        // Ajouter au DOM temporairement
+        document.body.appendChild(echoAudio);
+        
+        console.log('Test d\'écho démarré - vous devriez vous entendre parler');
+        console.log('Pistes audio locales:', localStreamRef.current.getAudioTracks().map(track => ({
+            enabled: track.enabled,
+            readyState: track.readyState,
+            muted: track.muted,
+            label: track.label
+        })));
+        
+        setIsEchoTesting(true);
+        
+        // Arrêter le test automatiquement après 10 secondes
+        setTimeout(() => {
+            stopEchoTest();
+        }, 10000);
+    }, []);
+
+    const stopEchoTest = useCallback(() => {
+        console.log('=== ARRÊT TEST D\'ÉCHO ===');
+        
+        const echoAudio = document.getElementById('echo-test-audio');
+        if (echoAudio) {
+            echoAudio.srcObject = null;
+            echoAudio.remove();
+        }
+        
+        setIsEchoTesting(false);
+        console.log('Test d\'écho terminé');
+    }, []);
+
+    useEffect(() => {
+        if (isLocalEchoEnabled) {
+            startEchoTest();
+        } else {
+            stopEchoTest();
+        }
+    }, [isLocalEchoEnabled, startEchoTest, stopEchoTest]);
 
     // États de chargement et d'erreur
     if (isLoading) {
@@ -913,6 +1057,11 @@ const SpaceDetailPage = () => {
                                             {connectionStatus}
                                         </span>
                                     )}
+                                    {isEchoTesting && (
+                                        <span className="text-xs px-2 py-1 rounded bg-orange-600 text-white">
+                                            🔊 Test d'écho en cours
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>
@@ -947,6 +1096,14 @@ const SpaceDetailPage = () => {
                                     Quitter
                                 </Button>
                             )}
+                            {isInSpace && (
+                                <Button
+                                    onClick={diagnosticConnections}
+                                    variant="secondary"
+                                >
+                                    Diagnostic
+                                </Button>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -966,8 +1123,8 @@ const SpaceDetailPage = () => {
 
                         {/* Contrôles audio (si dans le space) */}
                         {isInSpace && localStream && (
-                            <div className="bg-gb-dark-light rounded-lg p-6 mb-6">
-                                <h2 className="text-lg font-semibold text-gb-white mb-4">Contrôles Audio</h2>
+                            <div className="bg-white rounded-lg shadow-md p-6">
+                                <h2 className="text-lg font-semibold mb-4">Contrôles Audio</h2>
                                 <div className="audio-controls">
                                     <button
                                         onClick={toggleMute}
@@ -983,6 +1140,14 @@ const SpaceDetailPage = () => {
                                         title={isDeafened ? 'Activer le son' : 'Couper le son'}
                                     >
                                         {isDeafened ? '🔇' : '🔊'}
+                                    </button>
+                                    
+                                    <button
+                                        onClick={() => setIsLocalEchoEnabled(!isLocalEchoEnabled)}
+                                        className={`mic-button ${isLocalEchoEnabled ? 'muted' : 'unmuted'}`}
+                                        title={isLocalEchoEnabled ? 'Désactiver l\'écho local' : 'Activer l\'écho local'}
+                                    >
+                                        {isLocalEchoEnabled ? '🔊' : '🔇'}
                                     </button>
                                     
                                     <div className="text-center">
@@ -1022,6 +1187,21 @@ const SpaceDetailPage = () => {
                                             )}
                                         </div>
                                     )}
+                                    
+                                    {/* Bouton de test d'écho */}
+                                    <div className="ml-6 flex items-center space-x-3">
+                                        <button
+                                            onClick={isEchoTesting ? stopEchoTest : startEchoTest}
+                                            className={`bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md flex items-center space-x-2 ${isEchoTesting ? 'bg-orange-600 hover:bg-orange-700' : ''}`}
+                                            title={isEchoTesting ? "Arrêter le test d'écho" : "Démarrer le test d'écho"}
+                                        >
+                                            {isEchoTesting ? (
+                                                <span>⏹ Arrêter le test</span>
+                                            ) : (
+                                                <span>🔊 Test d'écho</span>
+                                            )}
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         )}
